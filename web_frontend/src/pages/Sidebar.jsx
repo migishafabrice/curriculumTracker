@@ -28,6 +28,12 @@ const Sidebar= ()=>
                         </Link>
                    </li>
                    <li class="nav-item" >
+                   <Link to="/Schools" class="sidebar-link nav-link d-flex align-items-center">
+                           <i class="fas fa-school"></i>
+                           <span class="ms-2 d-none d-sm-inline">Schools</span>
+                    </Link>
+                   </li>
+                   <li class="nav-item" >
                    <Link to="/Teachers" class="sidebar-link nav-link d-flex align-items-center">
                            <i class="fas fa-chalkboard-teacher"></i>
                            <span class="ms-2 d-none d-sm-inline">Teachers</span>

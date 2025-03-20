@@ -8,6 +8,7 @@ import ManageDiaries from "./pages/ManageDiaries";
 import ManageCurricula from "./pages/ManageCurricula";
 import ManageReports from "./pages/ManageReports";
 import ErrorBoundary from "./ErrorBoundary";
+import ManageSchools from './pages/ManageSchools';
 function App() {
   const [count, setCount] = useState(0)
 
@@ -22,6 +23,7 @@ function App() {
           <Route path="/Diaries" element={<ManageDiaries/>}/>
           <Route path="/Curricula" element={<ManageCurricula/>}/>
           <Route path="/Reports" element={<ManageReports/>}/>
+          <Route path='/Schools' element={<ManageSchools/>}/>
         </Routes>
       </Router>
       </ErrorBoundary>
