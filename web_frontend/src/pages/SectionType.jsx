@@ -5,7 +5,7 @@ const OptionType=()=>
    const [description,setDescription]=useState("");
    const [code,setCode]=useState("");
     return(
-        <div class="modal fade" id="addOptionModal" tabindex="-1" aria-labelledby="addOptionModalLabel" aria-hidden="true">
+        <div class="modal fade" id="addSectionTypeModal" tabindex="-1" aria-labelledby="addSectionTypeModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg">
         <div class="modal-content">
                     <div class="modal-header bg-primary text-white">

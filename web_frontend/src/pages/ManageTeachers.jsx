@@ -43,7 +43,7 @@ const ManageTeachers=()=>
   const handleSchoolChange = (selectedOption) => {
     setFormData({
       ...formData,
-      school: selectedOption ? selectedOption.value : "", // 👈 Set to empty string or null when cleared
+      school: selectedOption ? selectedOption.value : "",
     });
   };  
   const handleSubmit=async(e)=>
