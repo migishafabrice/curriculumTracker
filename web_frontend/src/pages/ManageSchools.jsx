@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
-import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
 import axios from 'axios';
+import useLoadSchools from './useLoadSchools';
 import { Provinces, Districts, Sectors, Cells, Villages } from 'rwanda';
 
 const ManageSchools = () => {
@@ -25,24 +25,20 @@ const ManageSchools = () => {
   const [sectors, setSectors] = useState([]);
   const [cells, setCells] = useState([]);
   const [villages, setVillages] = useState([]);
-  const [schools, setSchools] = useState([]);
-
   useEffect(() => {
     setProvinces(Provinces());
-    loadSchools();
   }, []);
 
-  const loadSchools = async () => {
-    try {
-      const response = await axios.get('http://localhost:5000/school/allSchools');
-      if (response.data.schools) {
-        setSchools(response.data.schools);
-      }
-    } catch (error) {
-      console.error('Error loading schools:', error);
-      setNotification({ message: 'Failed to load schools', type: 'error' });
+  const { schools, notice, loadSchools } = useLoadSchools();
+  useEffect(() => {
+    if (notice) {
+      setNotification(notice);
     }
-  };
+  }, [notice]);
+  // Load schools when the component mounts
+  useEffect(() => {
+    loadSchools();
+  }, [loadSchools]);
 
   const handleProvinceChange = (e) => {
     const province = e.target.value;
@@ -80,7 +76,7 @@ const ManageSchools = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const { isValid, errors } = addressValidate(formData);
+      const { isValid, errors } = inputValidate(formData);
       if (!isValid) {
         setNotification({ message: errors.join(', '), type: 'error' });
         return;
@@ -100,6 +96,7 @@ const ManageSchools = () => {
 
       if (response.data.type === 'success') {
         setNotification({ message: response.data.message, type: 'success' });
+        loadSchools();
         resetForm();
       } else {
         setNotification({ message: response.data.error, type: 'error' });
@@ -109,7 +106,7 @@ const ManageSchools = () => {
     }
   };
 
-  const addressValidate = ({ name, phone, email, province, district, sector, cell, village }) => {
+  const inputValidate = ({ name, phone, email, province, district, sector, cell, village }) => {
     const errors = [];
     if (!name) errors.push('Name cannot be empty.');
     if (!phone) errors.push('Phone cannot be empty.');
@@ -179,9 +176,9 @@ const ManageSchools = () => {
                           {/* <td>{school.id}</td> */}
                           <td>
                             <div className="d-flex align-items-center">
-                              <img src={`http://localhost:5000${school.logo}`} alt="Avatar" className="avatar" />
+                              <img src={`http://127.0.0.1:5000${school.logo}`} alt="Avatar" className="avatar" />
                               <div>
-                                <div className="fw-bold">{school.school_name}</div>
+                                <div className="fw-bold">{school.name}</div>
                                 {/* <div className="small text-muted">school.email}</div> */}
                               </div>
                             </div>
@@ -190,7 +187,7 @@ const ManageSchools = () => {
                           <td>{school.email}</td>
                           <td>{school.address}</td>
                           <td>
-                            <span className="badge bg-success status-badge">Active</span>
+                            <span className={school.active?("badge bg-success status-badge"):("badge bg-danger status-badge")}>Active</span>
                           </td>
                           <td>
                             <button className="btn btn-sm btn-outline-primary">

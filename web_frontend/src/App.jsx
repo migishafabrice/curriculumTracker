@@ -2,13 +2,14 @@ import { useState } from 'react'
 import {BrowserRouter as Router,Routes,Route} from "react-router-dom";
 import './App.css'
 import Login from './auth/Login'
-import Dashboard from './pages/Dashboard'
+import Dashboard from './pages/LevelType'
 import ManageTeachers from "./pages/ManageTeachers";
 import ManageDiaries from "./pages/ManageDiaries";
 import ManageCurricula from "./pages/ManageCurricula";
 import ManageReports from "./pages/ManageReports";
 import ErrorBoundary from "./ErrorBoundary";
 import ManageSchools from './pages/ManageSchools';
+import ManageDepartments from './pages/ManageDepartments';
 function App() {
   const [count, setCount] = useState(0)
 
@@ -24,6 +25,7 @@ function App() {
           <Route path="/Curricula" element={<ManageCurricula/>}/>
           <Route path="/Reports" element={<ManageReports/>}/>
           <Route path='/Schools' element={<ManageSchools/>}/>
+          <Route path='/Departments' element={<ManageDepartments/>}/>
         </Routes>
       </Router>
       </ErrorBoundary>

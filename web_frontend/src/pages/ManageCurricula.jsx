@@ -29,7 +29,7 @@ const ManageCurricula=()=>
                         <thead>
                             <tr>
                                 <th>ID</th>
-                                <th>Subject</th>
+                                <th>Category</th>
                                 <th>Grade</th>
                                 <th>Created By</th>
                                 <th>Last Update</th>
@@ -132,22 +132,16 @@ const ManageCurricula=()=>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-floating mb-3">
-                                        <select class="form-select" id="curriculumSubject">
-                                            <option selected disabled>Select a subject</option>
-                                            <option value="Mathematics">Mathematics</option>
-                                            <option value="English">English Language</option>
-                                            <option value="Science">Science</option>
-                                            <option value="Biology">Biology</option>
-                                            <option value="Chemistry">Chemistry</option>
-                                            <option value="Physics">Physics</option>
-                                            <option value="History">History</option>
-                                            <option value="Geography">Geography</option>
-                                            <option value="Social Studies">Social Studies</option>
-                                            <option value="Physical Education">Physical Education</option>
-                                            <option value="Arts">Arts</option>
-                                            <option value="Music">Music</option>
+                                        <select class="form-select" id="curriculumCategory">
+                                            <option selected disabled>Select a Category</option>
+                                            <option value="Mathematics">Nursery</option>
+                                            <option value="English">Primary</option>
+                                            <option value="Science">Secondary - Ordinary Level</option>
+                                            <option value="Biology">Advanced Level- General Education</option>
+                                            <option value="Chemistry">Advanced Level - TVET Education</option>
+                                            <option value="Physics">TVET Education - Short Education</option>
                                         </select>
-                                        <label for="curriculumSubject"><i class="fas fa-graduation-cap me-2"></i>Subject</label>
+                                        <label for="curriculumCategory"><i class="fas fa-graduation-cap me-2"></i>Category</label>
                                     </div>
                                 </div>
                             </div>
@@ -170,15 +164,11 @@ const ManageCurricula=()=>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-floating mb-3">
-                                        <select class="form-select" id="curriculumTeacher">
-                                            <option selected disabled>Select primary teacher</option>
-                                            <option value="1">John Smith</option>
-                                            <option value="2">Emily Johnson</option>
-                                            <option value="3">Michael Chen</option>
-                                            <option value="4">Lisa Rodriguez</option>
-                                            <option value="5">Robert Kim</option>
+                                        <select class="form-select" id="curriculumSubject">
+                                            <option selected disabled>Select Suject</option>
+                                            
                                         </select>
-                                        <label for="curriculumTeacher"><i class="fas fa-chalkboard-teacher me-2"></i>Primary Teacher</label>
+                                        <label for="curriculumSubject"><i class="fas fa-chalkboard-teacher me-2"></i>Subject</label>
                                     </div>
                                 </div>
                             </div>

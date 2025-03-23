@@ -1,10 +1,80 @@
-import React from 'react'
-import Sidebar from './Sidebar'
+import React, { useState,useEffect } from 'react'
+import Sidebar from './Sidebar';
+import useLoadSchools from './useLoadSchools';
+import Select from 'react-select';
+import 'react-toastify/dist/ReactToastify.css';
+import ToastMessage from '../ToastMessage';
+import axios from 'axios';
 const ManageTeachers=()=>
 {
+     const [notification, setNotification] = useState({ message: null, type: null });
+    const { schools, notice, loadSchools } = useLoadSchools();
+    const[formData,setFormData]=useState(
+    {
+        firstname:"",
+        lastname:"",
+        email:"",
+        phone:"",
+        school:"",
+        photo:null,
+    });
+    const schoolOptions = schools.map((school) => ({
+        value: school.code, 
+        label: school.name, 
+      }));
+  useEffect(() => {
+    if (notice) {
+      setNotification(notice);
+    }
+  }, [notice]);
+  // Load schools when the component mounts
+  useEffect(() => {
+    loadSchools();
+  }, [loadSchools]);
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    if (name !== 'school') {
+        setFormData({ ...formData, [name]: value });
+      }
+  };
+  const handleFileChange = (e) => {
+    setFormData({ ...formData, photo: e.target.files[0] });
+  };
+  const handleSchoolChange = (selectedOption) => {
+    setFormData({
+      ...formData,
+      school: selectedOption ? selectedOption.value : "", // 👈 Set to empty string or null when cleared
+    });
+  };  
+  const handleSubmit=async(e)=>
+  {
+    e.preventDefault();
+    try{
+    const data = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      data.append(key, value);
+    });
+    const response = await axios.post('http://localhost:5000/teacher/addTeacher', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    if (response.data.type === 'success') {
+      setNotification({ message: response.data.message, type: 'success' });
+    //   loadSchools();
+    //   resetForm();
+    } else {
+      setNotification({ message: response.data.error, type: 'error' });
+    }
+  } catch (error) {
+    setNotification({ message: `Error: ${error.message}`, type: 'error' });
+  }
+    
+    
+  }
     return(
         <>
            {/* <!--Add side content--> */}
+           {notification.message && <ToastMessage message={notification.message} type={notification.type} />}
            <Sidebar/>
             {/* <!-- Content --> */}
             <div className="page-content">
@@ -176,17 +246,17 @@ const ManageTeachers=()=>
                         <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div className="modal-body">
-                        <form id="teacherForm">
+                        <form id="teacherForm" onSubmit={handleSubmit}>
                             <div className="row mb-3">
                                 <div className="col-md-6">
                                     <div className="form-floating mb-3">
-                                        <input type="text" className="form-control" id="teacherFirstName" placeholder="First Name"/>
+                                        <input type="text" name='firstname' value={formData.firstname} onChange={handleInputChange} className="form-control" id="teacherFirstName" placeholder="First Name"/>
                                         <label for="teacherFirstName"><i className="fas fa-user me-2"></i>First Name</label>
                                     </div>
                                 </div>
                                 <div className="col-md-6">
                                     <div className="form-floating mb-3">
-                                        <input type="text" className="form-control" id="teacherLastName" placeholder="Last Name"/>
+                                        <input type="text" name='lastname' value={formData.lastname} onChange={handleInputChange} className="form-control" id="teacherLastName" placeholder="Last Name"/>
                                         <label for="teacherLastName"><i className="fas fa-user me-2"></i>Last Name</label>
                                     </div>
                                 </div>
@@ -195,59 +265,52 @@ const ManageTeachers=()=>
                             <div className="row mb-3">
                                 <div className="col-md-6">
                                     <div className="form-floating mb-3">
-                                        <input type="email" className="form-control" id="teacherEmail" placeholder="Email"/>
+                                        <input type="email" name='email' value={formData.email} onChange={handleInputChange} className="form-control" id="teacherEmail" placeholder="Email"/>
                                         <label for="teacherEmail"><i className="fas fa-envelope me-2"></i>Email</label>
                                     </div>
                                 </div>
                                 <div className="col-md-6">
                                     <div className="form-floating mb-3">
-                                        <input type="tel" className="form-control" id="teacherPhone" placeholder="Phone"/>
+                                        <input type="tel" name='phone' value={formData.phone} onChange={handleInputChange} className="form-control" id="teacherPhone" placeholder="Phone"/>
                                         <label for="teacherPhone"><i className="fas fa-phone me-2"></i>Phone</label>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="row mb-3">
-                                <div className="col-md-6">
-                                    <div className="form-floating mb-3">
-                                        <select className="form-select" id="teacherSubject">
-                                            <option selected disabled>Select a subject</option>
-                                            <option value="Mathematics">Mathematics</option>
-                                            <option value="English">English</option>
-                                            <option value="Science">Science</option>
-                                            <option value="Social Studies">Social Studies</option>
-                                            <option value="Physical Education">Physical Education</option>
-                                            <option value="Arts">Arts</option>
-                                            <option value="Music">Music</option>
-                                        </select>
-                                        <label for="teacherSubject"><i className="fas fa-book me-2"></i>Primary Subject</label>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="form-floating mb-3">
-                                        <input type="date" className="form-control" id="teacherJoinDate"/>
-                                        <label for="teacherJoinDate"><i className="fas fa-calendar me-2"></i>Join Date</label>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div className="mb-3">
+                                <label for="teacherSchool" className="form-label"><i className="fas fa-school me-2"></i>Upload Photo</label>
+                                    <Select
+                                    id="teacherSchool"
+                                    name='school'
+                                    
+                                   classNamePrefix="select"
+                                    placeholder="Select School"
+                                    isClearable={true} 
+                                    isSearchable={true} 
+                                    options={schoolOptions} 
+                                    value={schoolOptions.find(option => option.value === formData.school) || null}
+                                    onChange={handleSchoolChange}
+                                    />
+                                   </div>
+
+                            {/* <div className="mb-3">
                                 <div className="form-floating">
                                     <textarea className="form-control" id="teacherBio" style={{ height: "100px" }} placeholder="Bio"></textarea>
                                     <label for="teacherBio"><i className="fas fa-info-circle me-2"></i>Teacher Bio</label>
                                 </div>
-                            </div>
+                            </div> */}
 
                             <div className="mb-3">
                                 <label for="teacherPhoto" className="form-label"><i className="fas fa-image me-2"></i>Upload Photo</label>
-                                <input className="form-control" type="file" id="teacherPhoto"/>
+                                <input className="form-control" name='photo' onChange={handleFileChange} type="file" id="teacherPhoto"/>
                             </div>
+                        <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" className="btn btn-primary">Save Teacher</button>
+                        </div>
                         </form>
                     </div>
-                    <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" className="btn btn-primary">Save Teacher</button>
-                    </div>
+                    
                 </div>
             </div>
         </div>
