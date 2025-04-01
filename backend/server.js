@@ -3,6 +3,7 @@ const app = express();
 const schoolRoute = require('./routes/schoolRoute');
 const teacherRoute=require('./routes/teacherRoute');
 const educationRoute=require('./routes/departmentRoute')
+const curriculumRoute=require('./routes/curriculumRoute');
 const cors = require('cors');
 const port = process.env.PORT || 5000; // Default port if undefined
 app.use(cors());
@@ -13,6 +14,7 @@ app.use(express.json()); // To parse JSON requests
 app.use('/school', schoolRoute);
 app.use('/teacher',teacherRoute);
 app.use('/department',educationRoute);
+app.use('/curriculum',curriculumRoute);
 
 // Start server
 app.listen(port, () => {

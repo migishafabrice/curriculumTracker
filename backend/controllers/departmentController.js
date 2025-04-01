@@ -70,12 +70,12 @@ const addEducationType = async (req, res) => {
 };
 
 const addLevelType = async (req, res) => {
-    const { name, code, education_type, description } = req.body;
+    const { name, code, education_type, classes, description } = req.body;
 
     // Check if all required fields are provided
-    if (!name || !code || !education_type || !description) {
+    if (!name || !code || !education_type || !classes|| !description) {
         return res.status(400).json({
-            message: "Please fill all required fields: name, code, education_type, and description.",
+            message: "Please fill all required fields: name, code, education_type, classes and description.",
             error: "Empty fields not allowed.",
         });
     }
@@ -95,11 +95,11 @@ const addLevelType = async (req, res) => {
                 type: "error",
             });
         }
-
+        const escapedClasses = db.escape(classes);
         // Insert into DB
         const [query] = await db.query(
-            "INSERT INTO level_types (name, code, education_type, description, active) VALUES (?, ?, ?, ?, ?)",
-            [name, code, education_type, description, true]
+            "INSERT INTO level_types (name, code, education_type_code, classes, description, active) VALUES (?, ?, ?, ?, ?, ?)",
+            [name, code, education_type,escapedClasses, description, true]
         );
 
         // Check if insertion is successful
@@ -120,7 +120,7 @@ const addLevelType = async (req, res) => {
     } catch (error) {
         console.error("Error in addLevelType:", error);
         res.status(500).json({
-            message: "Something went wrong, level type not recorded.",
+            message: "Something went wrong, level type not recorded."+error,
             error: error.message,
             type: "error",
         });
@@ -128,12 +128,12 @@ const addLevelType = async (req, res) => {
 };
 
 const addSectionType = async (req, res) => {
-    const { name, code, education_type, level, description } = req.body;
+    const { name, code, education_type, level_type, description } = req.body;
 
     // Check if all required fields are provided
-    if (!name || !code || !education_type || !level || !description) {
+    if (!name || !code || !education_type || !level_type || !description) {
         return res.status(400).json({
-            message: "Please fill all required fields: name, code, education_type, level, and description.",
+            message: "Please fill all required fields: name, code, education, level, and description.",
             error: "Empty fields not allowed.",
         });
     }
@@ -156,8 +156,8 @@ const addSectionType = async (req, res) => {
 
         // Insert into DB
         const [query] = await db.query(
-            "INSERT INTO section_types (name, code, education_type, level, description, active) VALUES (?, ?, ?, ?, ?, ?)",
-            [name, code, education_type, level, description, true]
+            "INSERT INTO section_types (name, code, level_type_code, description, active) VALUES (?, ?, ?, ?, ?, ?)",
+            [name, code, level_type, description, true]
         );
 
         // Check if insertion is successful
@@ -173,7 +173,7 @@ const addSectionType = async (req, res) => {
         res.status(201).json({
             message: "Section type added successfully.",
             type: "success",
-            data: { name, code, education_type, level, description },
+            data: { name, code, education_type, level_type, description },
         });
     } catch (error) {
         console.error("Error in addSectionType:", error);
@@ -184,5 +184,93 @@ const addSectionType = async (req, res) => {
         });
     }
 };
+const getEducationTypes = async (req, res) => {
+    try {
+        // Retrieve all education types from the database
+        const [educationTypes] = await db.query("SELECT * FROM education_types order by name asc");
+        // Respond with the retrieved data
+        res.status(200).json({
+            type: "success",
+            educationTypes: educationTypes,
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Something went wrong while retrieving education types."+ error.message,
+            type: "error",
+        });
+    }
+};
+const getLevelTypes = async (req, res) => {
+    try {
+        const { education_type_code } = req.query;
 
-module.exports = { addSectionType, addLevelType, addEducationType };
+        if (!education_type_code) {
+            return res.status(400).json({
+                type: "error",
+                message: "education_type_code is required as a query parameter"
+            });
+        }
+
+        const [levelTypes] = await db.query(
+            "SELECT * FROM level_types WHERE education_type_code = ? ORDER BY name ASC",
+            [education_type_code]
+        );
+
+        res.status(200).json({
+            type: "success",
+            levelTypes: levelTypes,
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Failed to fetch level types: " + error.message,
+            type: "error",
+        });
+    }
+};
+const getSectionTypes = async (req, res) => {
+    try {
+        const { level_type_code } = req.query;
+
+        if (!level_type_code) {
+            return res.status(400).json({
+                type: "error",
+                message: "Catgeory is required"
+            });
+        }
+const [sectionTypes] = await db.query(
+            `SELECT section_types.*,level_types.classes FROM section_types 
+JOIN level_types ON section_types.level_type_code = level_types.code
+WHERE section_types.level_type_code = ?
+ORDER BY section_types.name,level_types.classes ASC`,
+            [level_type_code]
+        );
+    if (sectionTypes[0]) {
+        res.status(200).json({
+            message:"YES",
+            type: "success",
+            sectionTypes: sectionTypes,
+        });
+    } else {
+        const [classes] = await db.query(
+            `SELECT * FROM level_types
+WHERE code = ?
+ORDER BY classes ASC`,
+            [level_type_code]
+        );
+        if (classes[0]) {
+            res.status(200).json({
+                message:"NO",
+                type: "success",
+                sectionTypes: classes,
+            });
+        }
+    }
+       
+    } catch (error) {
+        res.status(500).json({
+            message: "Failed to fetch level types: " + error.message,
+            type: "error",
+        });
+    }
+};
+module.exports = { addSectionType, addLevelType, addEducationType , getEducationTypes,getLevelTypes,getSectionTypes};

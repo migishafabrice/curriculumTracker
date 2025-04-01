@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import React from 'react'
 import {BrowserRouter as Router,Routes,Route} from "react-router-dom";
 import './App.css'
 import Login from './auth/Login'
-import Dashboard from './pages/LevelType'
+import Dashboard from './pages/Dashboard'
 import ManageTeachers from "./pages/ManageTeachers";
 import ManageDiaries from "./pages/ManageDiaries";
 import ManageCurricula from "./pages/ManageCurricula";
@@ -11,8 +11,6 @@ import ErrorBoundary from "./ErrorBoundary";
 import ManageSchools from './pages/ManageSchools';
 import ManageDepartments from './pages/ManageDepartments';
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
     <>
      <ErrorBoundary>

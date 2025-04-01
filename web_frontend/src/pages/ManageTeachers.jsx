@@ -278,7 +278,7 @@ const ManageTeachers=()=>
                             </div>
 
                             <div className="mb-3">
-                                <label for="teacherSchool" className="form-label"><i className="fas fa-school me-2"></i>Upload Photo</label>
+                                <label for="teacherSchool" className="form-label"><i className="fas fa-school me-2"></i>School</label>
                                     <Select
                                     id="teacherSchool"
                                     name='school'

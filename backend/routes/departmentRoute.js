@@ -3,17 +3,19 @@ const router = express.Router();
 
 // Controller functions (you need to implement these in a separate file)
 const {
-    addEducationType
+    addEducationType,
+    addLevelType,
+    getEducationTypes,
+    getLevelTypes,
+    addSectionType,
+    getSectionTypes
     
 } = require('../controllers/departmentController');
-
-// Route to add a new education type
 router.post('/education-type', addEducationType);
-
-// Route to add a new education level
-// router.post('/education-level', addEducationLevel);
-
-// // Route to add a new education section
-// router.post('/education-section', addEducationSection);
+router.get('/education-types', getEducationTypes);
+router.post('/level-type', addLevelType);
+router.get('/level-types', getLevelTypes);
+router.post('/section-type', addSectionType);
+router.get('/section-types', getSectionTypes);
 
 module.exports = router;

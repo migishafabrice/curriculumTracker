@@ -2,3 +2,4 @@ node_modules/
 .env
 backend/uploads/
 ai_ml/venv
+data
