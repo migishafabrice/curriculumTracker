@@ -8,7 +8,7 @@ const { type } = require('os');
 // Configure multer for temporary file storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const tempDir = path.join(__dirname, '../../temp_uploads');
+    const tempDir = path.join(__dirname, '../../data/temp_uploads');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
@@ -47,7 +47,7 @@ const addCurriculum = async (req, res) => {
             fs.mkdirSync(finalUploadDir, { recursive: true });
           }
 
-          const finalFilename = 'doc-' + Date.now() + path.extname(req.file.originalname);
+          const finalFilename = code+"_" + Date.now() + path.extname(req.file.originalname);
           const finalPath = path.join(finalUploadDir, finalFilename);
 
           // Move file from temp location to permanent location
