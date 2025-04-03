@@ -43,7 +43,7 @@ export const useLevelTypes=(educationTypeId) => {
 }
 export const useSectionTypes=(levelTypeId) => {  
     const [sectionTypes, setSectionTypes] = useState([]);
-    const [classes, setClasses] = useState([]);
+   
     const [notification, setNotification] = useState({ message: '', type: '' });
         const fetchSectionTypes = async () => {
             try {
@@ -53,15 +53,8 @@ export const useSectionTypes=(levelTypeId) => {
                         value: type.code,
                         label: type.name,
                     })));
-                    const allClasses = response.data.sectionTypes.flatMap(item => 
-                        item.classes 
-                          ? item.classes.split(',').map(c => c.trim())
-                          : []
-                      );
-                    setClasses(allClasses.map((type) => ({
-                        value: type,
-                        label: type,
-                    })));
+                    
+                    
                 }
                
             } catch (error) {
@@ -69,5 +62,5 @@ export const useSectionTypes=(levelTypeId) => {
                 setNotification({ message: 'Failed to load section types', type: 'error' });
             }
         };
-  return {sectionTypes,classes, notification, fetchSectionTypes};
+  return {sectionTypes, notification, fetchSectionTypes};
 }

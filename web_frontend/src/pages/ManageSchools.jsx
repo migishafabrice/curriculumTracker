@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useMemo } from 'react';
 import Sidebar from './Sidebar';
 import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
@@ -8,138 +8,224 @@ import { Provinces, Districts, Sectors, Cells, Villages } from 'rwanda';
 import Select from 'react-select';
 import { useEducationTpes, useLevelTypes, useSectionTypes } from './CourseInfo';
 
-const ManageSchools = () => {
-  // School basic information form state
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
+// Initial state for form
+const initialFormState = {
+  name: '',
+  phone: '',
+  email: '',
+  education_type: '',
+  logo: null,
+  address: {
     province: '',
     district: '',
     sector: '',
     cell: '',
-    village: '',
-    education_type: '',
-    logo: null,
-  });
+    village: ''
+  }
+};
 
-  // School sections management
-  const [schoolSections, setSchoolSections] = useState([]);
-  const [currentSection, setCurrentSection] = useState({
-    level: '',
-    option: '',
-    class: ''
-  });
+// Form reducer for complex state management
+const formReducer = (state, action) => {
+  switch (action.type) {
+    case 'UPDATE_FIELD':
+      return { ...state, [action.field]: action.value };
+    case 'UPDATE_ADDRESS':
+      return { 
+        ...state, 
+        address: { ...state.address, [action.field]: action.value } 
+      };
+    case 'RESET':
+      return initialFormState;
+    default:
+      return state;
+  }
+};
 
-  // UI and data state
-  const [modal, setModal] = useState(false);
-  const [notification, setNotification] = useState({ message: null, type: null });
-  const [provinces, setProvinces] = useState([]);
+// Custom hook for school sections management
+
+
+// Custom hook for address management
+const useAddressData = () => {
+  const [provinces] = useState(Provinces());
   const [districts, setDistricts] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [cells, setCells] = useState([]);
   const [villages, setVillages] = useState([]);
 
-  // Load initial provinces data
+  const handleProvinceChange = (province) => {
+    setDistricts(Districts(province) || []);
+    setSectors([]);
+    setCells([]);
+    setVillages([]);
+  };
+
+  const handleDistrictChange = (district, province) => {
+    setSectors(Sectors(province, district) || []);
+    setCells([]);
+    setVillages([]);
+  };
+
+  const handleSectorChange = (sector, province, district) => {
+    setCells(Cells(province, district, sector) || []);
+    setVillages([]);
+  };
+
+  const handleCellChange = (cell, province, district, sector) => {
+    setVillages(Villages(province, district, sector, cell) || []);
+  };
+
+  return {
+    provinces,
+    districts,
+    sectors,
+    cells,
+    villages,
+    handleProvinceChange,
+    handleDistrictChange,
+    handleSectorChange,
+    handleCellChange
+  };
+};
+const useSchoolSections = () => {
+  const [sections, setSections] = useState([]);
+  
+  const addSection = useCallback((section) => {
+    if (!section.level) throw new Error('Level is required');
+    
+    setSections(prev => [...prev, {
+      ...section,
+      id: Date.now() // Use timestamp as temporary ID
+    }]);
+  }, []);
+    
+  const removeSection = useCallback((id) => {
+    setSections(prev => prev.filter(s => s.id !== id));
+  }, []);
+  
+  const groupSections = useCallback(() => {
+    return sections.reduce((groups, section) => {
+      if (!groups[section.education_type]) {
+        groups[section.education_type] = {
+          label: section.education_type_label,
+          levels: {}
+        };
+      }
+      
+      if (!groups[section.education_type].levels[section.level]) {
+        groups[section.education_type].levels[section.level] = {
+          label: section.level_label,
+          sections: []
+        };
+      }
+      
+      groups[section.education_type].levels[section.level].sections.push({
+        ...section,
+        label: section.option_label || 'General'
+      });
+      
+      return groups;
+    }, {});
+  }, [sections]);
+  
+  return { 
+    sections, 
+    addSection, 
+    removeSection, 
+    groupSections, 
+    setSections // This is now properly returned
+  };
+};
+const ManageSchools = () => {
+  // Form state
+ 
+  const [formData, dispatch] = useReducer(formReducer, initialFormState);
+  const [modal, setModal] = useState(false);
+  const [notification, setNotification] = useState({ message: null, type: null });
+  
+  // Address data
+  const addressData = useAddressData();
+  
+  // School sections
+  const { sections, addSection, removeSection, groupSections, setSections } = useSchoolSections();
+  const groupedSections = useMemo(() => groupSections(), [groupSections]);
+  
+  // Load data hooks
+  const { schools, notice, loadSchools } = useLoadSchools();
+  const { educationTypes, educationNotification,fetchEducationTypes } = useEducationTpes();
+  const { levelTypes,levelNotification,fetchLevelTypes } = useLevelTypes(formData.education_type);
+  const [currentSection, setCurrentSection] = useState({ level: '', option: '' });
+  const { sectionTypes,sectionNotification,fetchSectionTypes } = useSectionTypes(currentSection.level);
+
+  // Handle notifications
   useEffect(() => {
-    setProvinces(Provinces());
+    if(educationNotification) setNotification(educationNotification);
+    if (levelNotification) setNotification(levelNotification);
+    if(sectionNotification) setNotification(sectionNotification);
+    if (notice) setNotification(notice);
+  }, [educationNotification, levelNotification, notice, sectionNotification]);
+
+  // Initial load
+  // Fetch education types only once on mount
+useEffect(() => {
+  fetchEducationTypes();
+  loadSchools();
+}, [fetchEducationTypes, loadSchools]); // Include dependencies
+
+// Fetch level types only when education type changes
+useEffect(() => {
+  if (formData.education_type) {
+    fetchLevelTypes(formData.education_type);
+  }
+}, [formData.education_type, fetchLevelTypes]);
+
+// Fetch section types only when level changes
+useEffect(() => {
+  if (currentSection.level) {
+    fetchSectionTypes(currentSection.level);
+  }
+}, [currentSection.level, fetchSectionTypes]);
+  // Handlers
+  const handleInputChange = useCallback((e) => {
+    const { name, value } = e.target;
+    dispatch({ type: 'UPDATE_FIELD', field: name, value });
   }, []);
 
-  // Load schools data
-  const { schools, notice, loadSchools } = useLoadSchools();
-  useEffect(() => {
-    if (notice) {
-      setNotification(notice);
-    }
-    loadSchools();
-  }, [loadSchools, notice]);
+  const handleFileChange = useCallback((e) => {
+    dispatch({ type: 'UPDATE_FIELD', field: 'logo', value: e.target.files[0] });
+  }, []);
 
-  // Load education types
-  const { educationTypes, notification: educationTypeNotification, fetchEducationTypes } = useEducationTpes();
-  useEffect(() => {
-    if (educationTypeNotification) {
-      setNotification(educationTypeNotification);
-    }
-    fetchEducationTypes();
-  }, [fetchEducationTypes, educationTypeNotification]);
-
-  // Load level types based on selected education type
-  const { levelTypes, notification: levelTypeNotification, fetchLevelTypes } = useLevelTypes(formData.education_type);
-  useEffect(() => {
-    if (levelTypeNotification) {
-      setNotification(levelTypeNotification);
-    }
-    if (formData.education_type) {
-      fetchLevelTypes(formData.education_type);
-    }
-  }, [formData.education_type, fetchLevelTypes, levelTypeNotification]);
-
-  // Load section types and classes based on selected level
-  const { sectionTypes, classes, notification: sectionTypeNotification, fetchSectionTypes } = useSectionTypes(currentSection.level);
-  useEffect(() => {
-    if (sectionTypeNotification) {
-      setNotification(sectionTypeNotification);
-    }
-    if (currentSection.level) {
-      fetchSectionTypes(currentSection.level);
-    }
-  }, [currentSection.level, fetchSectionTypes, sectionTypeNotification]);
-
-  // Handle address selection changes
-  const handleProvinceChange = (e) => {
-    const province = e.target.value;
-    setFormData({ ...formData, province, district: '', sector: '', cell: '', village: '' });
-    setDistricts(Districts(province) || []);
-  };
-
-  const handleDistrictChange = (e) => {
-    const district = e.target.value;
-    setFormData({ ...formData, district, sector: '', cell: '', village: '' });
-    setSectors(Sectors(formData.province, district) || []);
-  };
-
-  const handleSectorChange = (e) => {
-    const sector = e.target.value;
-    setFormData({ ...formData, sector, cell: '', village: '' });
-    setCells(Cells(formData.province, formData.district, sector) || []);
-  };
-
-  const handleCellChange = (e) => {
-    const cell = e.target.value;
-    setFormData({ ...formData, cell, village: '' });
-    setVillages(Villages(formData.province, formData.district, formData.sector, cell) || []);
-  };
-
-  // Handle form input changes
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-
-  const handleFileChange = (e) => {
-    setFormData({ ...formData, logo: e.target.files[0] });
-  };
-
-  // Handle select dropdown changes
-  const handleSelectChange = (name, selectedOption) => {
+  const handleSelectChange = useCallback((name, selectedOption) => {
     const value = selectedOption ? selectedOption.value : '';
     
     if (name === 'education_type') {
-      setFormData({ ...formData, [name]: value });
+      dispatch({ type: 'UPDATE_FIELD', field: name, value });
     } else {
       setCurrentSection(prev => ({
         ...prev,
         [name]: value,
-        ...(name === 'level' ? { option: '', class: '' } : {}),
-        ...(name === 'option' ? { class: '' } : {})
+        ...(name === 'level' ? { option: '' } : {})
       }));
     }
-  };
+  }, []);
 
-  // Add a new school section to the list
-  const addSchoolSection = () => {
-    if (!currentSection.level || !currentSection.class) {
-      setNotification({ message: 'Please select at least level and class before adding', type: 'error' });
+  const handleAddressChange = useCallback((field, value) => {
+    dispatch({ type: 'UPDATE_ADDRESS', field, value });
+    
+    // Cascade address changes
+    if (field === 'province') {
+      addressData.handleProvinceChange(value);
+    } else if (field === 'district') {
+      addressData.handleDistrictChange(value, formData.address.province);
+    } else if (field === 'sector') {
+      addressData.handleSectorChange(value, formData.address.province, formData.address.district);
+    } else if (field === 'cell') {
+      addressData.handleCellChange(value, formData.address.province, formData.address.district, formData.address.sector);
+    }
+  }, [formData.address, addressData]);
+
+  const handleAddSection = useCallback(() => {
+    if (!currentSection.level) {
+      setNotification({ message: 'Please select at least level before adding', type: 'error' });
       return;
     }
 
@@ -149,11 +235,10 @@ const ManageSchools = () => {
     }
 
     // Check for duplicate section
-    const sectionExists = schoolSections.some(
+    const sectionExists = sections.some(
       section => 
         section.level === currentSection.level && 
-        section.option === currentSection.option && 
-        section.class === currentSection.class
+        section.option === currentSection.option
     );
 
     if (sectionExists) {
@@ -165,117 +250,62 @@ const ManageSchools = () => {
     const educationTypeLabel = educationTypes.find(et => et.value === formData.education_type)?.label || formData.education_type;
     const levelLabel = levelTypes.find(lt => lt.value === currentSection.level)?.label || currentSection.level;
     const optionLabel = sectionTypes?.find(st => st.value === currentSection.option)?.label || currentSection.option || 'General';
-    const classLabel = classes.find(c => c.value === currentSection.class)?.label || currentSection.class;
 
-    setSchoolSections(prev => [
-      ...prev,
-      {
-        ...currentSection,
-        education_type: formData.education_type,
-        education_type_label: educationTypeLabel,
-        level_label: levelLabel,
-        option_label: optionLabel,
-        class_label: classLabel
-      }
-    ]);
+    addSection({
+      ...currentSection,
+      education_type: formData.education_type,
+      education_type_label: educationTypeLabel,
+      level_label: levelLabel,
+      option_label: optionLabel
+    });
 
     // Reset current section selection
-    setCurrentSection({
-      level: '',
-      option: '',
-      class: ''
-    });
-  };
+    setCurrentSection({ level: '', option: '' });
+  }, [currentSection, educationTypes, formData.education_type, levelTypes, sections, sectionTypes, addSection]);
 
-  // Remove a school section from the list
-  const removeSchoolSection = (index) => {
-    setSchoolSections(prev => prev.filter((_, i) => i !== index));
-  };
+  // Prepare sections for API in the format section1, section2, etc.
+  const prepareSectionsForApi = useCallback(() => {
+    return sections.map(section => ({
+      education_type: section.education_type,
+      level: section.level,
+      option: section.option,
+    }));
+  }, [sections]);
 
-  // Group sections for display
-  const groupSections = () => {
-    return schoolSections.reduce((groups, section) => {
-      // Initialize education type group if it doesn't exist
-      if (!groups[section.education_type]) {
-        groups[section.education_type] = {
-          label: section.education_type_label,
-          levels: {}
-        };
-      }
-
-      // Initialize level group if it doesn't exist
-      if (!groups[section.education_type].levels[section.level]) {
-        groups[section.education_type].levels[section.level] = {
-          label: section.level_label,
-          options: {}
-        };
-      }
-
-      // Use 'general' as key if no option specified
-      const optionKey = section.option || 'general';
-      const optionLabel = section.option_label;
-
-      // Initialize option group if it doesn't exist
-      if (!groups[section.education_type].levels[section.level].options[optionKey]) {
-        groups[section.education_type].levels[section.level].options[optionKey] = {
-          label: optionLabel,
-          classes: []
-        };
-      }
-
-      // Add class to the option group
-      groups[section.education_type].levels[section.level].options[optionKey].classes.push({
-        value: section.class,
-        label: section.class_label,
-        originalIndex: schoolSections.indexOf(section)
-      });
-
-      return groups;
-    }, {});
-  };
-
-  // Validate form inputs
-  const inputValidate = ({ name, phone, email, province, district, sector, cell, village }) => {
-    const errors = [];
-    if (!name) errors.push('Name cannot be empty.');
-    if (!phone) errors.push('Phone cannot be empty.');
-    if (!email) errors.push('Email cannot be empty.');
-    if (!province || province === 'Select Province') errors.push('Invalid province selected.');
-    if (!district || district === 'Select District') errors.push('Invalid district selected.');
-    if (!sector || sector === 'Select Sector') errors.push('Invalid sector selected.');
-    if (!cell || cell === 'Select Cell') errors.push('Invalid cell selected.');
-    if (!village || village === 'Select Village') errors.push('Invalid village selected.');
-    return { isValid: errors.length === 0, errors };
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e) => {
+  // Form submission
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     try {
-      // Validate basic form data
-      const { isValid, errors } = inputValidate(formData);
-      if (!isValid) {
-        setNotification({ message: errors.join(', '), type: 'error' });
+      // Basic validation
+      if (!formData.name || !formData.phone || !formData.email || !formData.education_type) {
+        setNotification({ message: 'Please fill all required fields', type: 'error' });
         return;
       }
 
-      // Validate school sections
-      if (schoolSections.length === 0) {
+      if (sections.length === 0) {
         setNotification({ message: 'Please add at least one school section', type: 'error' });
         return;
       }
 
       // Prepare form data
       const data = new FormData();
-      data.append('address', `${formData.province} - ${formData.district} - ${formData.sector} - ${formData.cell} - ${formData.village}`);
-      data.append('school_sections', JSON.stringify(schoolSections));
+      data.append('name', formData.name);
+      data.append('phone', formData.phone);
+      data.append('email', formData.email);
+      // data.append('education_type', formData.education_type);
       
-      // Append other form fields
-      Object.entries(formData).forEach(([key, value]) => {
-        if (key !== 'province' && key !== 'district' && key !== 'sector' && key !== 'cell' && key !== 'village') {
-          data.append(key, value);
-        }
-      });
+      // Add address
+      const address = `${formData.address.province} - ${formData.address.district} - ${formData.address.sector} - ${formData.address.cell} - ${formData.address.village}`;
+      data.append('address', address);
+      
+      // Add sections as section1, section2, etc.
+      const preparedSections = prepareSectionsForApi();
+      data.append('sections', JSON.stringify(preparedSections));
+      
+      // Add logo if exists
+      if (formData.logo) {
+        data.append('logo', formData.logo);
+      }
 
       // Submit to server
       const response = await axios.post('http://localhost:5000/school/addSchool', data, {
@@ -286,40 +316,23 @@ const ManageSchools = () => {
       if (response.data.type === 'success') {
         setNotification({ message: response.data.message, type: 'success' });
         loadSchools();
-        resetForm();
+        dispatch({ type: 'RESET' });
         setModal(false);
+        setSections([]);
       } else {
         setNotification({ message: response.data.error, type: 'error' });
       }
     } catch (error) {
       setNotification({ message: `Error: ${error.message}`, type: 'error' });
     }
-  };
+  }, [formData,sections, prepareSectionsForApi, loadSchools, dispatch, setModal, setSections]);
 
-  // Reset form to initial state
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      phone: '',
-      email: '',
-      province: '',
-      district: '',
-      sector: '',
-      cell: '',
-      village: '',
-      education_type: '',
-      logo: null,
-    });
-    setCurrentSection({ level: '', option: '', class: '' });
-    setSchoolSections([]);
-    setDistricts([]);
-    setSectors([]);
-    setCells([]);
-    setVillages([]);
-  };
-
-  // Get grouped sections for display
-  const groupedSections = groupSections();
+  // Reset form
+  const resetForm = useCallback(() => {
+    dispatch({ type: 'RESET' });
+    setSections([]);
+    setCurrentSection({ level: '', option: '' });
+  }, [ setSections ]);
 
   return (
     <>
@@ -335,6 +348,8 @@ const ManageSchools = () => {
               </button>
             </div>
           </div>
+          
+          {/* Schools List */}
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="card-title mb-0">Schools List</h5>
@@ -349,6 +364,7 @@ const ManageSchools = () => {
                         <th>Telephone</th>
                         <th>Email</th>
                         <th>Address</th>
+                        <th>Sections</th>
                         <th>Status</th>
                         <th>Actions</th>
                       </tr>
@@ -367,6 +383,7 @@ const ManageSchools = () => {
                           <td>{school.telephone}</td>
                           <td>{school.email}</td>
                           <td>{school.address}</td>
+                          <td>{school.section_types}</td>
                           <td>
                             <span className={school.active ? "badge bg-success status-badge" : "badge bg-danger status-badge"}>
                               {school.active ? "Active" : "Inactive"}
@@ -416,6 +433,7 @@ const ManageSchools = () => {
                         className="form-control"
                         id="SchoolName"
                         placeholder="Name"
+                        required
                       />
                       <label htmlFor="SchoolName"><i className="fas fa-user me-2"></i>Name</label>
                     </div>
@@ -430,6 +448,7 @@ const ManageSchools = () => {
                         className="form-control"
                         id="SchoolPhone"
                         placeholder="Telephone"
+                        required
                       />
                       <label htmlFor="SchoolPhone"><i className="fas fa-phone me-2"></i>Phone</label>
                     </div>
@@ -446,6 +465,7 @@ const ManageSchools = () => {
                         className="form-control"
                         id="SchoolEmail"
                         placeholder="Email"
+                        required
                       />
                       <label htmlFor="SchoolEmail"><i className="fas fa-envelope me-2"></i>Email</label>
                     </div>
@@ -473,7 +493,7 @@ const ManageSchools = () => {
                   <h5 className="mb-3">School Sections</h5>
                   
                   <div className="row mb-3">
-                    <div className="col-md-4">
+                    <div className="col-md-6">
                       <label htmlFor="CourseTitle">
                         <i className="fas fa-level-up-alt me-2"></i>Education Level
                       </label>
@@ -488,35 +508,19 @@ const ManageSchools = () => {
                         />
                       </div>
                     </div>
-                    {sectionTypes && sectionTypes.length > 0 && (
-                      <div className="col-md-4">
-                        <label htmlFor="CourseSection">
-                          <i className="fas fa-th-large me-2"></i>Education Option
-                        </label>
-                        <div className="mb-3">
-                          <Select
-                            id="CourseSection"
-                            isClearable={true}
-                            options={sectionTypes}
-                            onChange={(selected) => handleSelectChange("option", selected)}
-                            placeholder="Select Option"
-                            value={sectionTypes.find(opt => opt.value === currentSection.option)}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <div className="col-md-4">
-                      <label htmlFor="CourseClass">
-                        <i className="fas fa-chalkboard me-2"></i>Class/Promotion
+                   
+                    <div className="col-md-6">
+                      <label htmlFor="CourseSection">
+                        <i className="fas fa-th-large me-2"></i>Education Option
                       </label>
                       <div className="mb-3">
                         <Select
-                          id="CourseClass"
+                          id="CourseSection"
                           isClearable={true}
-                          options={classes}
-                          onChange={(selected) => handleSelectChange("class", selected)}
-                          placeholder="Select Class"
-                          value={classes.find(opt => opt.value === currentSection.class)}
+                          options={sectionTypes}
+                          onChange={(selected) => handleSelectChange("option", selected)}
+                          placeholder="Select Option"
+                          value={sectionTypes.find(opt => opt.value === currentSection.option)}
                         />
                       </div>
                     </div>
@@ -526,14 +530,14 @@ const ManageSchools = () => {
                     <button 
                       type="button" 
                       className="btn btn-primary"
-                      onClick={addSchoolSection}
-                      disabled={!currentSection.level || !currentSection.class || !formData.education_type}
+                      onClick={handleAddSection}
+                      disabled={!currentSection.level || !formData.education_type}
                     >
                       <i className="fas fa-plus me-2"></i>Add to School Sections
                     </button>
                   </div>
 
-                  {schoolSections.length > 0 && (
+                  {sections.length > 0 && (
                     <div className="mt-4">
                       <h6>Selected School Sections</h6>
                       <div className="table-responsive">
@@ -543,24 +547,19 @@ const ManageSchools = () => {
                             {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
                               <div key={level} className="ms-3 mb-3">
                                 <h6 className="text-muted">{levelData.label}</h6>
-                                {Object.entries(levelData.options).map(([option, optionData]) => (
-                                  <div key={option} className="ms-3 mb-2">
-                                    <p className="mb-1 fw-bold">{optionData.label}</p>
-                                    <div className="d-flex flex-wrap gap-2">
-                                      {optionData.classes.map((classItem) => (
-                                        <span key={classItem.value} className="badge bg-primary d-flex align-items-center">
-                                          {classItem.label}
-                                          <button 
-                                            type="button" 
-                                            className="btn-close btn-close-white ms-2" 
-                                            onClick={() => removeSchoolSection(classItem.originalIndex)}
-                                            aria-label="Remove"
-                                          />
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
+                                <div className="d-flex flex-wrap gap-2 ms-3">
+                                  {levelData.sections.map((section) => (
+                                    <span key={section.id} className="badge bg-primary d-inline-flex align-items-center">
+                                      {section.label}
+                                      <button 
+                                        type="button" 
+                                        className="btn-close btn-close-white ms-2" 
+                                        onClick={() => removeSection(section.id)}
+                                        aria-label="Remove"
+                                      />
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -578,11 +577,12 @@ const ManageSchools = () => {
                         className="form-select"
                         id="schoolProvince"
                         name="province"
-                        value={formData.province}
-                        onChange={handleProvinceChange}
+                        value={formData.address.province}
+                        onChange={(e) => handleAddressChange('province', e.target.value)}
+                        required
                       >
-                        <option>Select Province</option>
-                        {provinces.map((province) => (
+                        <option value="">Select Province</option>
+                        {addressData.provinces.map((province) => (
                           <option key={province} value={province}>
                             {province}
                           </option>
@@ -597,11 +597,13 @@ const ManageSchools = () => {
                         className="form-select"
                         id="schoolDistrict"
                         name="district"
-                        value={formData.district}
-                        onChange={handleDistrictChange}
+                        value={formData.address.district}
+                        onChange={(e) => handleAddressChange('district', e.target.value)}
+                        required
+                        disabled={!formData.address.province}
                       >
-                        <option>Select District</option>
-                        {districts.map((district) => (
+                        <option value="">Select District</option>
+                        {addressData.districts.map((district) => (
                           <option key={district} value={district}>
                             {district}
                           </option>
@@ -618,11 +620,13 @@ const ManageSchools = () => {
                         className="form-select"
                         id="schoolSector"
                         name="sector"
-                        value={formData.sector}
-                        onChange={handleSectorChange}
+                        value={formData.address.sector}
+                        onChange={(e) => handleAddressChange('sector', e.target.value)}
+                        required
+                        disabled={!formData.address.district}
                       >
-                        <option>Select Sector</option>
-                        {sectors.map((sector) => (
+                        <option value="">Select Sector</option>
+                        {addressData.sectors.map((sector) => (
                           <option key={sector} value={sector}>
                             {sector}
                           </option>
@@ -637,11 +641,13 @@ const ManageSchools = () => {
                         className="form-select"
                         id="schoolCell"
                         name="cell"
-                        value={formData.cell}
-                        onChange={handleCellChange}
+                        value={formData.address.cell}
+                        onChange={(e) => handleAddressChange('cell', e.target.value)}
+                        required
+                        disabled={!formData.address.sector}
                       >
-                        <option>Select Cell</option>
-                        {cells.map((cell) => (
+                        <option value="">Select Cell</option>
+                        {addressData.cells.map((cell) => (
                           <option key={cell} value={cell}>
                             {cell}
                           </option>
@@ -658,11 +664,13 @@ const ManageSchools = () => {
                         className="form-select"
                         id="schoolVillage"
                         name="village"
-                        value={formData.village}
-                        onChange={handleInputChange}
+                        value={formData.address.village}
+                        onChange={(e) => handleAddressChange('village', e.target.value)}
+                        required
+                        disabled={!formData.address.cell}
                       >
-                        <option>Select Village</option>
-                        {villages.map((village) => (
+                        <option value="">Select Village</option>
+                        {addressData.villages.map((village) => (
                           <option key={village} value={village}>
                             {village}
                           </option>
@@ -689,7 +697,7 @@ const ManageSchools = () => {
                 </div>
 
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>
+                  <button type="button" className="btn btn-secondary" onClick={() => { setModal(false); resetForm(); }}>
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary">

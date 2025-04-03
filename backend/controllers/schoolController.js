@@ -2,8 +2,12 @@ const {db,generateRandomPassword}=require('../config/config');
 const addSchool = async (req, res) => {
   const { name, phone, email, address } = req.body;
   const logo = req.file;
-
-  if (!name || !phone || !email || !address || !logo) {
+  const sections = req.body.sections ? JSON.parse(req.body.sections) : null;
+    // Convert sections to database-ready format
+    const dbSections = sections
+    ? JSON.stringify(sections.map(section => section.option ))
+    : null;
+  if (!name || !phone || !email || !address || !logo || !sections) {
     return res.status(400).json({
       message: 'Fill required fields',
       error: 'Empty fields not allowed.'
@@ -26,9 +30,9 @@ const addSchool = async (req, res) => {
 
     // Insert into DB
     const [query] = await db.query(
-      "INSERT INTO schools (code, name, telephone, email, address, password, active, logo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [code, name, phone, email, address, password, true, logoPath]
-    );
+      `INSERT INTO schools (code, name, telephone, email, address,section_types,
+       password, active, logo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [code, name, phone, email, address,dbSections, password, true, logoPath]);
 
     if (query.affectedRows === 0) {
       return res.status(500).json({
