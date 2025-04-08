@@ -4,7 +4,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
 import axios from 'axios';
 import useLoadSchools from './useLoadSchools';
-import { Provinces, Districts, Sectors, Cells, Villages } from 'rwanda';
+import Address from './Address';
 import Select from 'react-select';
 import { useEducationTpes, useLevelTypes, useSectionTypes } from './CourseInfo';
 
@@ -43,49 +43,6 @@ const formReducer = (state, action) => {
 
 // Custom hook for school sections management
 
-
-// Custom hook for address management
-const useAddressData = () => {
-  const [provinces] = useState(Provinces());
-  const [districts, setDistricts] = useState([]);
-  const [sectors, setSectors] = useState([]);
-  const [cells, setCells] = useState([]);
-  const [villages, setVillages] = useState([]);
-
-  const handleProvinceChange = (province) => {
-    setDistricts(Districts(province) || []);
-    setSectors([]);
-    setCells([]);
-    setVillages([]);
-  };
-
-  const handleDistrictChange = (district, province) => {
-    setSectors(Sectors(province, district) || []);
-    setCells([]);
-    setVillages([]);
-  };
-
-  const handleSectorChange = (sector, province, district) => {
-    setCells(Cells(province, district, sector) || []);
-    setVillages([]);
-  };
-
-  const handleCellChange = (cell, province, district, sector) => {
-    setVillages(Villages(province, district, sector, cell) || []);
-  };
-
-  return {
-    provinces,
-    districts,
-    sectors,
-    cells,
-    villages,
-    handleProvinceChange,
-    handleDistrictChange,
-    handleSectorChange,
-    handleCellChange
-  };
-};
 const useSchoolSections = () => {
   const [sections, setSections] = useState([]);
   
@@ -142,8 +99,7 @@ const ManageSchools = () => {
   const [modal, setModal] = useState(false);
   const [notification, setNotification] = useState({ message: null, type: null });
   
-  // Address data
-  const addressData = useAddressData();
+;
   
   // School sections
   const { sections, addSection, removeSection, groupSections, setSections } = useSchoolSections();
@@ -210,18 +166,7 @@ useEffect(() => {
 
   const handleAddressChange = useCallback((field, value) => {
     dispatch({ type: 'UPDATE_ADDRESS', field, value });
-    
-    // Cascade address changes
-    if (field === 'province') {
-      addressData.handleProvinceChange(value);
-    } else if (field === 'district') {
-      addressData.handleDistrictChange(value, formData.address.province);
-    } else if (field === 'sector') {
-      addressData.handleSectorChange(value, formData.address.province, formData.address.district);
-    } else if (field === 'cell') {
-      addressData.handleCellChange(value, formData.address.province, formData.address.district, formData.address.sector);
-    }
-  }, [formData.address, addressData]);
+  }, []);
 
   const handleAddSection = useCallback(() => {
     if (!currentSection.level) {
@@ -570,116 +515,11 @@ useEffect(() => {
                 </div>
 
                 {/* Address Information */}
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <select
-                        className="form-select"
-                        id="schoolProvince"
-                        name="province"
-                        value={formData.address.province}
-                        onChange={(e) => handleAddressChange('province', e.target.value)}
-                        required
-                      >
-                        <option value="">Select Province</option>
-                        {addressData.provinces.map((province) => (
-                          <option key={province} value={province}>
-                            {province}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="schoolProvince"><i className="fas fa-globe-africa me-2"></i>Province</label>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <select
-                        className="form-select"
-                        id="schoolDistrict"
-                        name="district"
-                        value={formData.address.district}
-                        onChange={(e) => handleAddressChange('district', e.target.value)}
-                        required
-                        disabled={!formData.address.province}
-                      >
-                        <option value="">Select District</option>
-                        {addressData.districts.map((district) => (
-                          <option key={district} value={district}>
-                            {district}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="schoolDistrict"><i className="fas fa-city me-2"></i>District</label>
-                    </div>
-                  </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <select
-                        className="form-select"
-                        id="schoolSector"
-                        name="sector"
-                        value={formData.address.sector}
-                        onChange={(e) => handleAddressChange('sector', e.target.value)}
-                        required
-                        disabled={!formData.address.district}
-                      >
-                        <option value="">Select Sector</option>
-                        {addressData.sectors.map((sector) => (
-                          <option key={sector} value={sector}>
-                            {sector}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="schoolSector"><i className="fas fa-globe-africa me-2"></i>Sector</label>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <select
-                        className="form-select"
-                        id="schoolCell"
-                        name="cell"
-                        value={formData.address.cell}
-                        onChange={(e) => handleAddressChange('cell', e.target.value)}
-                        required
-                        disabled={!formData.address.sector}
-                      >
-                        <option value="">Select Cell</option>
-                        {addressData.cells.map((cell) => (
-                          <option key={cell} value={cell}>
-                            {cell}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="schoolCell"><i className="fas fa-city me-2"></i>Cell</label>
-                    </div>
-                  </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-md-12">
-                    <div className="form-floating mb-3">
-                      <select
-                        className="form-select"
-                        id="schoolVillage"
-                        name="village"
-                        value={formData.address.village}
-                        onChange={(e) => handleAddressChange('village', e.target.value)}
-                        required
-                        disabled={!formData.address.cell}
-                      >
-                        <option value="">Select Village</option>
-                        {addressData.villages.map((village) => (
-                          <option key={village} value={village}>
-                            {village}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="schoolVillage"><i className="fas fa-globe-africa me-2"></i>Village</label>
-                    </div>
-                  </div>
-                </div>
+                               
+                <Address
+  address={formData.address} 
+  onChange={(field, value) => handleAddressChange(field, value)} 
+/>
 
                 {/* Logo Upload */}
                 <div className="mb-3">
