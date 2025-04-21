@@ -184,44 +184,150 @@ const addSectionType = async (req, res) => {
         });
     }
 };
-const getEducationTypes = async (req, res) => {
+const getEducationTypes = async ({ school_code }) => {
     try {
-        // Retrieve all education types from the database
-        const [educationTypes] = await db.query("SELECT * FROM education_types order by name asc");
-        // Respond with the retrieved data
-        res.status(200).json({
+        if(!school_code) {
+        const [educationTypes] = await db.query(
+            "SELECT * FROM education_types ORDER BY name ASC"
+            
+        );
+        if (!educationTypes.length=== 0) {
+            return {
+                type: "error",
+                message: "No education types found.",
+            };
+        }
+        ({
             type: "success",
-            educationTypes: educationTypes,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Something went wrong while retrieving education types."+ error.message,
+            educationTypes: educationTypes,   
+         });
+        }
+    
+         if (school_code) {
+             const [schoolSections] = await db.query(
+                    "SELECT section_types AS section FROM schools WHERE code = ?",
+                    [school_code]
+                );
+        
+                if (!schoolSections.length) {
+                    ({ 
+                        type: "error", 
+                        message: "School not found or School has not sections registered." 
+                    });
+                }
+                const sectionCodes = JSON.parse(schoolSections[0]?.section || "[]");
+                if (!sectionCodes.length) {
+                    ({ 
+                        type: "error", 
+                        message: "No sections found for this school.",
+                        
+                    });
+                }
+                
+              const [educationTypes] = await db.query(`
+                    SELECT DISTINCT et.*  
+                    FROM section_types st
+                    JOIN level_types lt ON st.level_type_code = lt.code
+                    JOIN education_types et ON lt.education_type_code = et.code
+                    WHERE st.code IN (?)
+                    ORDER BY et.name ASC
+                `, [sectionCodes]);
+                if(!educationTypes.length===0) {
+                    return res.status(200).json({
+                        type: "error",
+                        message: "No education types found for this school.",
+                       
+                    });
+                }
+                
+                return ({ 
+                    type: "success", 
+                    educationTypes: educationTypes
+                });
+            }
+            
+            }
+    
+catch (error) {
+        // Handle errors and return an error response
+        return {
             type: "error",
-        });
+            message: "Something went wrong while retrieving education types: " + error.message,
+        };
     }
 };
-const getLevelTypes = async (req, res) => {
+const getLevelTypes = async ({education_type_code,school_code}) => {
     try {
-        const { education_type_code } = req.query;
-
+       
         if (!education_type_code) {
-            return res.status(400).json({
+            return({
                 type: "error",
                 message: "education_type_code is required as a query parameter"
             });
         }
-
-        const [levelTypes] = await db.query(
-            "SELECT * FROM level_types WHERE education_type_code = ? ORDER BY name ASC",
-            [education_type_code]
-        );
-
-        res.status(200).json({
-            type: "success",
-            levelTypes: levelTypes,
-        });
-    } catch (error) {
-        res.status(500).json({
+        
+        if(!school_code) {
+            
+            const [levelTypes] = await db.query(
+                "SELECT * FROM level_types WHERE education_type_code = ? ORDER BY name ASC",
+                [education_type_code]
+            );
+            if (!levelTypes.length=== 0) {
+                return {
+                    type: "error",
+                    message: "No level types found.",
+                };
+            }
+            return {
+                type: "success",
+                levelTypes: levelTypes,
+            };
+        }
+        if(school_code){
+        
+            const [schoolSections] = await db.query(
+                "SELECT section_types AS section FROM schools WHERE code = ?",
+                [school_code]
+            );
+    
+            if (!schoolSections.length) {
+                return ({ 
+                    type: "error", 
+                    message: "School not found or School has not sections registered." 
+                });
+            }
+            const sectionCodes = JSON.parse(schoolSections[0]?.section || "[]");
+            if (!sectionCodes.length) {
+                return ({ 
+                    type: "error", 
+                    message: "No sections found for this school."
+                });
+            }
+           
+          const [levelTypes] = await db.query(`
+                SELECT DISTINCT lt.*  
+                FROM section_types st
+                JOIN level_types lt ON st.level_type_code = lt.code
+                JOIN education_types et ON lt.education_type_code = et.code
+                WHERE st.code IN (?) AND et.code = ?
+                ORDER BY lt.name ASC
+            `, [sectionCodes,education_type_code]);
+            if(!levelTypes.length===0) {
+                return ({
+                    type: "error",
+                    message: "No level types found for this school.",
+                    levelTypes: [],
+                });
+            }
+            
+            return ({ 
+                type: "success", 
+                levelTypes: levelTypes
+            });
+        }
+    } 
+    catch (error) {
+        return({
             message: "Failed to fetch level types: " + error.message,
             type: "error",
         });

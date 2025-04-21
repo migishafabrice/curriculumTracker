@@ -7,6 +7,7 @@ import ToastMessage from '../ToastMessage';
 import axios from 'axios';
 import Address from './Address';
 import { getCurrentUser } from './AuthUser'; 
+import {fetchEducationTypes,fetchLevelTypes,fetchSectionTypes} from './CurriculumFunctions';
 const user=getCurrentUser(); 
 // Define initial form data and reducer outside the component
 const initialFormData = {
@@ -14,10 +15,10 @@ const initialFormData = {
   lastname: "",
   email: "",
   phone: "",
-  school: user?.role==="School" ?user.userid : "",
+  school: user?.role==="School" ? user.userid : "",
   photo: null,
-  role:"",
-  address: {
+     role:"",
+    address: {
     province: '',
     district: '',
     sector: '',
@@ -42,18 +43,20 @@ const formReducer = (state, action) => {
   }
 };
 
-const ManageTeachers = () => {
-  
+const ManageCourses = () => {
+  const [teachers, setTeachers] = useState([]);
   const [formData, dispatch] = useReducer(formReducer, initialFormData);
   const [notification, setNotification] = useState({ message: null, type: null });
-  const [teachers, setTeachers] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const { schools, notice, loadSchools } = useLoadSchools();
-
-  const teachersPerPage = 10;
+  const [educationTypes, setEducationTypes] = useState([]);
+  const [levelTypes,setLevelTypes]=useState([]);
+  const [sectionTypes,setSectionTypes]=useState([]);
+  const coursesPerPage = 10;
 
   const schoolOptions = useMemo(() => 
     schools.map((school) => ({
@@ -61,6 +64,29 @@ const ManageTeachers = () => {
       label: school.name, 
     }))
   , [schools]);
+useEffect(() => {
+  const loadEducationTypes = async () => {
+    try {
+      
+    const types = await fetchEducationTypes(user?.role==="School" ? user.userid : "");
+    setEducationTypes(types.map(({code,name})=>
+    (
+      {
+      value:code,
+      label:name
+      }
+    )
+    ));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch education types', type: 'error' });
+      console.error("Failed to fetch education types:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  loadEducationTypes();
+}, []);
 
   // Notification effect with cleanup
   useEffect(() => {
@@ -78,7 +104,7 @@ const ManageTeachers = () => {
     }
   }, [notification]);
 
-  // Load schools and teachers on mount
+  // Load schools and courses on mount
   useEffect(() => {
     const initializeData = async () => {
       await loadSchools();
@@ -87,46 +113,81 @@ const ManageTeachers = () => {
     initializeData();
   }, []);
 
-
   const fetchTeachers = async () => {
+      try {
+        let response;
+        if (user.role === 'School') {
+          response = await axios.get('http://localhost:5000/teacher/allTeachers', {
+            headers: { Authorization: `Bearer ${user.token}` },
+            params: { userid: user.userid }
+          });
+        } else {
+          response = await axios.get('http://localhost:5000/teacher/allTeachers', {
+            headers: { Authorization: `Bearer ${user.token}` }
+          });
+        }
+    
+        if (response.data.teachers && response.data.type === "success") {
+            setTeachers(
+            Array.isArray(response.data.teachers)
+              ? response.data.teachers.map((teacher) => ({
+                value: teacher.code,
+                label: `${teacher.firstname} ${teacher.lastname}`,
+              }))
+              : []
+            );
+        } else if (response.data.type === "error") {
+          setNotification({ message: response.data.message, type: "error" });
+        }
+      } catch (error) {
+        setNotification({ 
+          message: `Error fetching teachers: ${error.message}`, 
+          type: 'error' 
+        });
+        setTeachers([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+  const fetchCourses = async () => {
     try {
       let response;
       if (user.role === 'School') {
-        response = await axios.get('http://localhost:5000/teacher/allTeachers', {
+        response = await axios.get('http://localhost:5000/course/allCourses', {
           headers: { Authorization: `Bearer ${user.token}` },
           params: { userid: user.userid }
         });
       } else {
-        response = await axios.get('http://localhost:5000/teacher/allTeachers', {
+        response = await axios.get('http://localhost:5000/course/allCourses', {
           headers: { Authorization: `Bearer ${user.token}` }
         });
       }
   
-      if (response.data.teachers && response.data.type === "success") {
-        setTeachers(Array.isArray(response.data.teachers) ? response.data.teachers : []);
+      if (response.data.courses && response.data.type === "success") {
+        setCourses(Array.isArray(response.data.courses) ? response.data.courses : []);
       } else if (response.data.type === "error") {
         setNotification({ message: response.data.message, type: "error" });
       }
     } catch (error) {
       setNotification({ 
-        message: `Error fetching teachers: ${error.message}`, 
+        message: `Error fetching courses: ${error.message}`, 
         type: 'error' 
       });
-      setTeachers([]);
+      setCourses([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredTeachers = useMemo(() => {
+  const filteredCourses = useMemo(() => {
     // Add additional type checking to be safe
-    if (!Array.isArray(teachers)) return [];
+    if (!Array.isArray(courses)) return [];
     
-    return teachers.filter(teacher => {
-      // Add null checks for teacher properties
-      const firstname = teacher?.firstname?.toLowerCase() || '';
-      const lastname = teacher?.lastname?.toLowerCase() || '';
-      const status = teacher?.status || '';
+    return courses.filter(course => {
+      // Add null checks for course properties
+      const firstname = course?.firstname?.toLowerCase() || '';
+      const lastname = course?.lastname?.toLowerCase() || '';
+      const status = course?.status || '';
       
       const matchesSearch = firstname.includes(searchTerm.toLowerCase()) || 
                           lastname.includes(searchTerm.toLowerCase());
@@ -134,16 +195,16 @@ const ManageTeachers = () => {
       
       return matchesSearch && matchesStatus;
     });
-  }, [teachers, searchTerm, statusFilter]);
+  }, [courses, searchTerm, statusFilter]);
 
-  const paginatedTeachers = useMemo(() => {
-    const startIndex = (currentPage - 1) * teachersPerPage;
-    return filteredTeachers.slice(startIndex, startIndex + teachersPerPage);
-  }, [filteredTeachers, currentPage]);
+  const paginatedCourses = useMemo(() => {
+    const startIndex = (currentPage - 1) * coursesPerPage;
+    return filteredCourses.slice(startIndex, startIndex + coursesPerPage);
+  }, [filteredCourses, currentPage]);
   useEffect(() => {
-    setCurrentPage(1); // Reset to the first page when teachers list changes
-  }, [teachers]);
-  const totalPages = Math.ceil(filteredTeachers.length / teachersPerPage);
+    setCurrentPage(1); // Reset to the first page when courses list changes
+  }, [courses]);
+  const totalPages = Math.ceil(filteredCourses.length / coursesPerPage);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -189,6 +250,30 @@ const ManageTeachers = () => {
     }
     return true;
   };
+const handleEducationType=async(education_type)=>
+{
+const levels=await fetchLevelTypes(education_type, user.role==="School" ? user.userid : "");
+
+setLevelTypes(levels.map(({code,name})=>
+(
+  {
+    value:code,
+    label:name
+  }
+)))
+}
+const handleLevelType=async(level_type)=>
+{
+const sections=await fetchSectionTypes(level_type.value);
+setSectionTypes(sections.map(({code,name})=>
+(
+  {
+    value:code,
+    label:name
+  }
+)
+))
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -207,7 +292,7 @@ const ManageTeachers = () => {
         data.append('photo', formData.photo);
       }
       const response = await axios.post(
-        'http://localhost:5000/teacher/addTeacher', 
+        'http://localhost:5000/course/addCourse', 
         data, 
         { headers: { 'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${user.token}`,
@@ -217,9 +302,9 @@ const ManageTeachers = () => {
 
       if (response.data.type === 'success') {
         setNotification({ message: response.data.message, type: 'success' });
-        await fetchTeachers();
+        await fetchCourses();
         dispatch({ type: 'RESET' });
-        document.getElementById('closeAddTeacherModal').click();
+        document.getElementById('closeAddCourseModal').click();
       } else {
         setNotification({ message: response.data.error, type: 'error' });
       }
@@ -231,19 +316,19 @@ const ManageTeachers = () => {
     }
   };
 
-  const handleDeleteTeacher = async (teacherId) => {
-    if (window.confirm('Are you sure you want to delete this teacher?')) {
+  const handleDeleteCourse = async (courseId) => {
+    if (window.confirm('Are you sure you want to delete this course?')) {
       try {
         const response = await axios.delete(
-          `http://localhost:5000/teacher/deleteTeacher/${teacherId}`
+          `http://localhost:5000/course/deleteCourse/${courseId}`
         );
         if (response.data.type === 'success') {
           setNotification({ message: response.data.message, type: 'success' });
-          await fetchTeachers();
+          await fetchCourses();
         }
       } catch (error) {
         setNotification({ 
-          message: `Error deleting teacher: ${error.message}`, 
+          message: `Error deleting course: ${error.message}`, 
           type: 'error' 
         });
       }
@@ -266,23 +351,23 @@ const ManageTeachers = () => {
       )}
       <Sidebar/>
       <div className="page-content">
-        <div id="teachers-page" className="page">
+        <div id="courses-page" className="page">
           <div className="page-header">
-            <h1 className="h2">Teachers Management</h1>
+            <h1 className="h2">Assigned Courses</h1>
             <div>
               <button 
                 className="btn btn-primary" 
                 data-bs-toggle="modal" 
-                data-bs-target="#addTeacherModal"
+                data-bs-target="#addCourseModal"
               >
-                <i className="fas fa-plus"></i> Add New Teacher
+                <i className="fas fa-plus"></i> Assign New Course
               </button>
             </div>
           </div>
                     
           <div className="card mb-4">
             <div className="card-header">
-              <h5 className="card-title mb-0">Teachers List</h5>
+              <h5 className="card-title mb-0">Courses List</h5>
             </div>
             <div className="d-flex justify-content-end align-items-center mt-4 mb-3 pe-3" 
                  style={{ width: "60%", marginLeft: "auto" }}>
@@ -292,7 +377,7 @@ const ManageTeachers = () => {
                 <input 
                   type="text" 
                   className="form-control" 
-                  id="teacherSearch" 
+                  id="courseSearch" 
                   placeholder="Search by name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -329,7 +414,7 @@ const ManageTeachers = () => {
                       <thead>
                         <tr>
                           
-                          <th>Teacher</th>
+                          <th>Course</th>
                           <th>Email</th>
                           <th>Contact</th>
                           <th>School</th>
@@ -338,15 +423,15 @@ const ManageTeachers = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedTeachers.length > 0 ? (
-                          paginatedTeachers.map((teacher) => (
-                            <tr key={teacher._id}>
+                        {paginatedCourses.length > 0 ? (
+                          paginatedCourses.map((course) => (
+                            <tr key={course._id}>
                               
                               <td>
                                 <div className="d-flex align-items-center">
-                                  {teacher.photo ? (
+                                  {course.photo ? (
                                     <img 
-                                    src={`http://localhost:5000${teacher.photo}`} 
+                                    src={`http://localhost:5000${course.photo}`} 
                                     alt="Avatar" 
                                     className="avatar" 
                                     style={{ width: '40px', height: '40px', borderRadius: '50%' }}
@@ -357,24 +442,24 @@ const ManageTeachers = () => {
                                   />
                                   ) : (
                                     <div className="avatar-placeholder">
-                                      {teacher.firstname.charAt(0)}{teacher.lastname.charAt(0)}
+                                      {course.firstname.charAt(0)}{course.lastname.charAt(0)}
                                     </div>
                                   )}
                                   <div className="ms-2">
                                     <div className="fw-bold">
-                                      {teacher.firstname} {teacher.lastname}
+                                      {course.firstname} {course.lastname}
                                     </div>
                                   </div>
                                 </div>
                               </td>
-                              <td>{teacher.email}</td>
-                              <td>{teacher.telephone}</td>
+                              <td>{course.email}</td>
+                              <td>{course.telephone}</td>
                               <td>
-                                {schools.find(s => s.code === teacher.school)?.name || 'N/A'}
+                                {schools.find(s => s.code === course.school)?.name || 'N/A'}
                               </td>
                               <td>
-                                <span className={`badge ${teacher.status === 'active' ? 'bg-success' : 'bg-warning'} status-badge`}>
-                                  {teacher.status === 'active' ? 'Active' : 'On Leave'}
+                                <span className={`badge ${course.status === 'active' ? 'bg-success' : 'bg-warning'} status-badge`}>
+                                  {course.status === 'active' ? 'Active' : 'On Leave'}
                                 </span>
                               </td>
                               <td>
@@ -383,7 +468,7 @@ const ManageTeachers = () => {
                                 </button>
                                 <button 
                                   className="btn btn-sm btn-outline-danger"
-                                  onClick={() => handleDeleteTeacher(teacher._id)}
+                                  onClick={() => handleDeleteCourse(course._id)}
                                 >
                                   <i className="fas fa-trash"></i>
                                 </button>
@@ -392,7 +477,7 @@ const ManageTeachers = () => {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="7" className="text-center">No teachers found</td>
+                            <td colSpan="7" className="text-center">No courses found</td>
                           </tr>
                         )}
                       </tbody>
@@ -442,108 +527,151 @@ const ManageTeachers = () => {
         </div>
       </div>
     
-      {/* Modal to add new teacher */}
-      <div className="modal fade" id="addTeacherModal" tabIndex="-1" aria-labelledby="addTeacherModalLabel" aria-hidden="true">
+      {/* Modal to add new course */}
+      <div className="modal fade" id="addCourseModal" tabIndex="-1" aria-labelledby="addCourseModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
             <div className="modal-header bg-primary text-white">
-              <h5 className="modal-title" id="addTeacherModalLabel">Add New Teacher</h5>
+              <h5 className="modal-title" id="addCourseModalLabel">Assign Course</h5>
               <button 
                 type="button" 
                 className="btn-close btn-close-white" 
                 data-bs-dismiss="modal" 
                 aria-label="Close"
-                id="closeAddTeacherModal"
+                id="closeAddCourseModal"
               ></button>
             </div>
             <div className="modal-body">
-              <form id="teacherForm" onSubmit={handleSubmit}>
+              <form id="courseForm" onSubmit={handleSubmit}>
                 <div className="row mb-3">
+                  
+                  
+                </div>
+                {/* <div className="mb-4 border-top pt-1"> */}
+                  {/* <h5 className="mb-3">School Sections</h5> */}
+                  
+                  <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label htmlFor="CourseCategory">
+                      <i className="fas fa-tags me-2"></i>Education Type
+                    </label>
+                    <div className="mb-3">
+                      <Select
+                        id="CourseCategory"
+                        isClearable={true}
+                        options={educationTypes}
+                        onChange={(selected) => handleEducationType(selected.value)}
+                        // value={educationTypes.find(opt => opt.value === formData.education_type)}
+                        placeholder="Select Education Type"
+                        required
+                      />
+                    </div>
+                  </div>
+                    <div className="col-md-4">
+                      <label htmlFor="CourseTitle">
+                        <i className="fas fa-level-up-alt me-2"></i>Education Level
+                      </label>
+                      <div className="mb-3">
+                        <Select
+                          id="CourseGrade"
+                          isClearable={true}
+                          options={levelTypes}
+                          onChange={(selected) => handleLevelType( selected)}
+                          placeholder="Select Level"
+                          // value={levelTypes.find(opt => opt.value === currentSection.level)}
+                        />
+                      </div>
+                    </div>
+                   
+                    <div className="col-md-4">
+                      <label htmlFor="CourseSection">
+                        <i className="fas fa-th-large me-2"></i>Education Section | Option
+                      </label>
+                      <div className="mb-3">
+                        <Select
+                          id="CourseSection"
+                          isClearable={true}
+                          options={sectionTypes}
+                          // onChange={(selected) => handleSelectChange("option", selected)}
+                          placeholder="Select Option"
+                          // value={sectionTypes.find(opt => opt.value === currentSection.option)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
                   <div className="col-md-6">
                     <div className="form-floating mb-3">
                       <input 
                         type="text" 
                         name='firstname' 
-                        value={formData.firstname} 
+                        value={formData.name} 
                         onChange={handleInputChange} 
                         className="form-control" 
-                        id="teacherFirstName" 
+                        id="courseFirstName" 
                         placeholder="First Name"
                         required
                       />
-                      <label htmlFor="teacherFirstName">
-                        <i className="fas fa-user me-2"></i>First Name
+                      <label htmlFor="courseFirstName">
+                        <i className="fas fa-user me-2"></i>Course Name
                       </label>
                     </div>
                   </div>
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input 
-                        type="text" 
-                        name='lastname' 
-                        value={formData.lastname} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherLastName" 
-                        placeholder="Last Name"
-                        required
-                      />
-                      <label htmlFor="teacherLastName">
-                        <i className="fas fa-user me-2"></i>Last Name
-                      </label>
-                    </div>
+                    <button 
+                      type="button" 
+                      className="btn btn-primary"
+                      // onClick={handleAddSection}
+                      // disabled={!currentSection.level || !formData.education_type}
+                    >
+                      <i className="fas fa-plus me-2"></i>Add to School Sections
+                    </button>
                   </div>
-                </div>
 
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input 
-                        type="email" 
-                        name='email' 
-                        value={formData.email} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherEmail" 
-                        placeholder="Email"
-                        required
-                      />
-                      <label htmlFor="teacherEmail">
-                        <i className="fas fa-envelope me-2"></i>Email
-                      </label>
+                  {/* {sections.length > 0 && (
+                    <div className="mt-4">
+                      <h6>Selected School Sections</h6>
+                      <div className="table-responsive">
+                        {Object.entries(groupedSections).map(([eduType, eduTypeData]) => (
+                          <div key={eduType} className="mb-4">
+                            <h6 className="bg-light p-2">{eduTypeData.label}</h6>
+                            {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
+                              <div key={level} className="ms-3 mb-3">
+                                <h6 className="text-muted">{levelData.label}</h6>
+                                <div className="d-flex flex-wrap gap-2 ms-3">
+                                  {levelData.sections.map((section) => (
+                                    <span key={section.id} className="badge bg-primary d-inline-flex align-items-center">
+                                      {section.label}
+                                      <button 
+                                        type="button" 
+                                        className="btn-close btn-close-white ms-2" 
+                                        onClick={() => removeSection(section.id)}
+                                        aria-label="Remove"
+                                      />
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input 
-                        type="tel" 
-                        name='phone' 
-                        value={formData.phone} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherPhone" 
-                        placeholder="Phone"
-                        required
-                      />
-                      <label htmlFor="teacherPhone">
-                        <i className="fas fa-phone me-2"></i>Phone
-                      </label>
-                    </div>
-                  </div>
-                </div>
+                  )} */}
+                {/* </div> */}
+                
                 {user.role!=='School' && <Address
                   address={formData.address} 
                   onChange={handleAddressChange} 
                 />}
                 
-                
                 <div className="row mb-3">
                 <div className="col-md-6">
-                  <label htmlFor="teacherSchool" className="form-label">
+                  <label htmlFor="courseSchool" className="form-label">
                     <i className="fas fa-school me-2"></i>School
                   </label>
                   {user.role!=='School' ? (<Select
-                    id="teacherSchool"
+                    id="courseSchool"
                     name='school'
                     classNamePrefix="select"
                     placeholder="Select School"
@@ -558,19 +686,25 @@ const ManageTeachers = () => {
                     </select>) }
                 </div>
                 <div className="col-md-6">
-                <label htmlFor="teacherSchool" className="form-label">
-                    <i className="fas fa-user-shield me-2"></i>Role
+                <label htmlFor="courseSchool" className="form-label">
+                    <i className="fas fa-user-shield me-2"></i>Teacher
                   </label>
-                <select className='form-select' name='role' onChange={handleInputChange} value={formData.role}>
-                  <option value=''>Select Role</option>
-                  <option value='School Manager'>School Manager</option>
-                  <option value='Head of Teachers'>Head of Teachers</option>
-                  <option value='Teacher'>Teacher</option>
-                </select>
+                  <Select
+                    id="courseTeacher"
+                    name='teacher'
+                    classNamePrefix="select"
+                    placeholder="Select Teacher"
+                    isClearable={true} 
+                    isSearchable={true} 
+                    options={teachers} 
+                    value={teachers.find(option => option.value === formData.teacher) || null}
+                    onChange={(selectedOption) => {
+                      dispatch({ type: 'UPDATE_FIELD', field: 'teacher', value: selectedOption ? selectedOption.value : "" });
+                    }}/>
                 </div>
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="teacherPhoto" className="form-label">
+                  <label htmlFor="coursePhoto" className="form-label">
                     <i className="fas fa-image me-2"></i>Upload Photo
                   </label>
                   <input 
@@ -578,7 +712,7 @@ const ManageTeachers = () => {
                     name='photo' 
                     onChange={handleFileChange} 
                     type="file" 
-                    id="teacherPhoto"
+                    id="coursePhoto"
                     accept="image/*"
                   />
                 </div>
@@ -592,7 +726,7 @@ const ManageTeachers = () => {
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary">
-                    Save Teacher
+                    Save Course
                   </button>
                 </div>
               </form>
@@ -604,4 +738,4 @@ const ManageTeachers = () => {
   );
 };
 
-export default ManageTeachers;
+export default ManageCourses;

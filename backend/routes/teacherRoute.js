@@ -1,7 +1,7 @@
-const express = require('express'); // Import Express
-const { addTeacher, getTeachers } = require("../controllers/teacherController"); // Controller function
-
-const Router = express.Router(); // Create a new Router instance
+const express = require('express'); 
+const { addTeacher, getTeachers } = require("../controllers/teacherController"); 
+const jwtMiddleware = require('../middleware/jwtMiddleware'); 
+const Router = express.Router(); 
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -34,7 +34,11 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, fileFilter });
 
 // Define the POST route for adding a school
-Router.post('/addTeacher', upload.single('photo'), addTeacher);
-Router.get('/allTeachers',getTeachers);
+Router.post('/addTeacher',jwtMiddleware, upload.single('photo'), addTeacher);
+Router.get('/allTeachers/:id', jwtMiddleware, (req, res) => {
+  const teacherId = req.params.id;
+  getTeachers(req, res, teacherId);
+});
+Router.get('/allTeachers',jwtMiddleware,getTeachers);
 
 module.exports = Router; // Export the router for use in other files

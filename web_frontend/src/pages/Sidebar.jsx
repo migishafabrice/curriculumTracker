@@ -1,89 +1,87 @@
-import React, { useState }  from "react";
-import {Link} from "react-router-dom";
-const Sidebar= ()=>
-{
-    const [isToggled,setIstoggled]=useState(false);
-    const toggleSidebar=()=>
-        {
-           setIstoggled(!isToggled) ;
-        }
-    return(
-        <>
-       
-    <button className="btn btn-primary d-md-none position-fixed bottom-3 end-3 z-3" onClick={toggleSidebar} 
-    style={{ marginLeft: isToggled ? '150px' : '0' }}>
-        <i className={`${isToggled?"fas fa-chevron-left":"fas fa-chevron-right"}`}></i>
-    </button>
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import noImage from '../assets/img/no-image.png'; 
+import { getCurrentUser } from "./AuthUser"; // Adjust the import path as necessary
+const Sidebar = () => {
+    const [isToggled, setIsToggled] = useState(false);
+    const toggleSidebar = () => setIsToggled(!isToggled);
+    const user = getCurrentUser();
 
-       <div className={`sidebar ${isToggled ? "show" : ""}`} >
-           <div className="d-flex flex-column align-items-center align-items-sm-start px-3 pt-4 text-white min-vh-100">
-               <a href="#" className="d-flex align-items-center pb-3 mb-md-0 me-md-auto text-white text-decoration-none">
-                   <span className="fs-5 d-none d-sm-inline">EduManage</span>
-               </a>
-               <ul className="nav nav-pills flex-column mb-sm-auto mb-0 align-items-center align-items-sm-start" id="menu">
-                   <li className="nav-item">
-                       <Link to="/Dashboard" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-tachometer-alt"></i>
-                           <span className="ms-2 d-none d-sm-inline">Dashboard</span>
+    return (
+        <>
+            <button 
+                className="btn btn-primary d-md-none position-fixed bottom-3 end-3 z-3" 
+                onClick={toggleSidebar}
+                style={{ marginLeft: isToggled ? '150px' : '0' }}
+                aria-label="Toggle sidebar"
+            >
+                <i className={`fas ${isToggled ? "fa-chevron-left" : "fa-chevron-right"}`}></i>
+            </button>
+
+            <div className={`sidebar ${isToggled ? "show" : ""}`}>
+                <div className="d-flex flex-column justify-content-between px-3 pt-3 text-white min-vh-100">
+                    <div>
+                        <Link to="/" className="d-flex align-items-center pb-2 mb-md-0 me-md-auto text-white text-decoration-none">
+                            <span className="fs-5 d-none d-sm-inline">EduManage</span>
                         </Link>
-                   </li>
-                   <li className="nav-item" >
-                   <Link to="/Schools" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-school"></i>
-                           <span className="ms-2 d-none d-sm-inline">Schools</span>
-                    </Link>
-                   </li>
-                   <li className="nav-item" >
-                   <Link to="/Departments" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-chalkboard-teacher"></i>
-                           <span className="ms-2 d-none d-sm-inline">Departments</span>
-                    </Link>
-                   </li>
-                   <li className="nav-item" >
-                   <Link to="/Teachers" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-chalkboard-teacher"></i>
-                           <span className="ms-2 d-none d-sm-inline">Teachers</span>
-                    </Link>
-                   </li>
-                   <li className="nav-item">
-                   <Link to="/Curricula" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-book"></i>
-                           <span className="ms-2 d-none d-sm-inline">Curriculum</span>
-                    </Link>
-                   </li>
-                   <li className="nav-item">
-                   <Link to="/Diaries" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-calendar-alt"></i>
-                           <span className="ms-2 d-none d-sm-inline">Class Diary</span>
-                    </Link>
-                   </li>
-                   <li className="nav-item">
-                   <Link to="/Reports" className="sidebar-link nav-link d-flex align-items-center">
-                           <i className="fas fa-chart-bar"></i>
-                           <span className="ms-2 d-none d-sm-inline">Reports</span>
-                    </Link>
-                   </li>
-               </ul>
-               <hr/>
-               
-               <div className="dropdown pb-4">
-                   <a href="#" className="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false">
-                       <img src="/api/placeholder/50/50" alt="Profile" width="30" height="30" className="rounded-circle"/>
-                       <span className="d-none d-sm-inline mx-1">Admin</span>
-                   </a>
-                   <ul className="dropdown-menu dropdown-menu-dark text-small shadow">
-                       <li>Settings</li>
-                       <li>Profile</li>
-                       <li>
-                           <hr className="dropdown-divider"/>
-                       </li>
-                       <Link to="/Logout"><li>Sign out</li></Link>
-                   </ul>
-               </div>
-              
-           </div>
-       </div>
-       </>
+
+                        <ul className="nav nav-pills flex-column mb-2">
+                            {[
+                                { to: "/Dashboard", icon: "fa-tachometer-alt", text: "Dashboard" },
+                                { to: "/Schools", icon: "fa-school", text: "Schools" },
+                                { to: "/Departments", icon: "fa-chalkboard-teacher", text: "Departments" },
+                                { to: "/Teachers", icon: "fa-users", text: "Teachers" },
+                                { to: "/Courses", icon: "fa-users", text: "Courses" },
+                                { to: "/Curricula", icon: "fa-book", text: "Curriculum" },
+                                { to: "/Diaries", icon: "fa-calendar-alt", text: "Class Diary" },
+                                { to: "/Reports", icon: "fa-chart-bar", text: "Reports" }
+                            ].map((item, index) => (
+                                <li key={index} className="nav-item">
+                                    <Link to={item.to} className="sidebar-link nav-link d-flex align-items-center py-2">
+                                        <i className={`fas ${item.icon} me-2`}></i>
+                                        <span className="d-none d-sm-inline">{item.text}</span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {/* User Profile Section */}
+                    <div className="user-profile pb-2">
+                        <div className="d-flex align-items-center text-white mb-2">
+                            <img 
+                                src={noImage} 
+                                alt="User profile" 
+                                width="36" 
+                                height="36" 
+                                className="rounded-circle me-2 border border-light"
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = noImage;
+                                }}
+                            />
+                            <div className="d-flex flex-column">
+                                <span className="fw-bold small">{user.firstname} {user.lastname}</span>
+                                <hr width="100%"/>
+                                <span className="fs-8 fw-bold text-warning">{user.role}</span>
+                            </div>
+                        </div>
+                        
+                        <div className="d-flex flex-column gap-1">
+                            <Link to="/profile" className="btn btn-outline-light btn-sm py-1">
+                                <i className="fas fa-user me-1"></i>
+                                <span>Profile</span>
+                            </Link>
+                            <Link to="/logout" className="btn btn-danger btn-sm py-1">
+                                <i className="fas fa-sign-out-alt me-1"></i>
+                                <span>Sign Out</span>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
     );
 };
+
 export default Sidebar;

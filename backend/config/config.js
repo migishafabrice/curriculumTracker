@@ -1,5 +1,4 @@
-const mysql = require('mysql2/promise');
-const argon = require("argon2"); 
+const mysql = require('mysql2/promise'); 
 require("dotenv").config();
 async function generateRandomPassword(length = 8) {
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -19,9 +18,9 @@ async function generateRandomPassword(length = 8) {
       password += allChars[Math.floor(Math.random() * allChars.length)];
     }
     const _password=password.split('').sort(() => Math.random() - 0.5).join('');
-    const hashedPassword = await argon.hash(_password);
+   
     // Shuffle the password to randomize the order of the required characters
-    return hashedPassword;
+    return _password;
   }
 const db = mysql.createPool({
     user: process.env.DBUSERNAME,
