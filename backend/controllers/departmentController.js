@@ -156,7 +156,7 @@ const addSectionType = async (req, res) => {
 
         // Insert into DB
         const [query] = await db.query(
-            "INSERT INTO section_types (name, code, level_type_code, description, active) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO section_types (name, code, level_type_code, description, active) VALUES (?, ?, ?, ?, ?)",
             [name, code, level_type, description, true]
         );
 
@@ -186,18 +186,20 @@ const addSectionType = async (req, res) => {
 };
 const getEducationTypes = async ({ school_code }) => {
     try {
+        
         if(!school_code) {
         const [educationTypes] = await db.query(
             "SELECT * FROM education_types ORDER BY name ASC"
             
         );
+        
         if (!educationTypes.length=== 0) {
             return {
                 type: "error",
                 message: "No education types found.",
             };
         }
-        ({
+       return  ({
             type: "success",
             educationTypes: educationTypes,   
          });
@@ -333,50 +335,115 @@ const getLevelTypes = async ({education_type_code,school_code}) => {
         });
     }
 };
-const getSectionTypes = async (req, res) => {
+const getSectionTypes = async ({level_type_code,school_code}) => {
     try {
-        const { level_type_code } = req.query;
-
-        if (!level_type_code) {
-            return res.status(400).json({
-                type: "error",
-                message: "Catgeory is required"
-            });
-        }
-const [sectionTypes] = await db.query(
-            `SELECT section_types.*,level_types.classes FROM section_types 
-JOIN level_types ON section_types.level_type_code = level_types.code
-WHERE section_types.level_type_code = ?
-ORDER BY section_types.name,level_types.classes ASC`,
-            [level_type_code]
-        );
-    if (sectionTypes[0]) {
-        res.status(200).json({
-            message:"YES",
-            type: "success",
-            sectionTypes: sectionTypes,
-        });
-    } else {
-        const [classes] = await db.query(
-            `SELECT * FROM level_types
-WHERE code = ?
-ORDER BY classes ASC`,
-            [level_type_code]
-        );
-        if (classes[0]) {
-            res.status(200).json({
-                message:"NO",
-                type: "success",
-                sectionTypes: classes,
-            });
-        }
-    }
        
-    } catch (error) {
-        res.status(500).json({
+        if (!level_type_code) {
+            return({
+                type: "error",
+                message: "Level is required"
+            });
+        }
+        
+        if(!school_code) {
+            
+            const [sectionTypes] = await db.query(
+                "SELECT * FROM section_types WHERE level_type_code = ? ORDER BY name ASC",
+                [level_type_code]
+            );
+            if (!sectionTypes.length=== 0) {
+                return {
+                    type: "error",
+                    message: "No Sections found.",
+                };
+            }
+            return {
+                type: "success",
+                sectionTypes: sectionTypes,
+            };
+        }
+        if(school_code){
+        
+            const [schoolSections] = await db.query(
+                "SELECT section_types AS section FROM schools WHERE code = ?",
+                [school_code]
+            );
+    
+            if (!schoolSections.length) {
+                return ({ 
+                    type: "error", 
+                    message: "School not found or School has not sections registered." 
+                });
+            }
+            const sectionCodes = JSON.parse(schoolSections[0]?.section || "[]");
+            if (!sectionCodes.length) {
+                return ({ 
+                    type: "error", 
+                    message: "No sections found for this school."
+                });
+            }
+           
+          const [sectionTypes] = await db.query(`
+                SELECT DISTINCT st.*  
+                FROM section_types st
+                JOIN level_types lt ON st.level_type_code = lt.code
+                WHERE st.code IN (?) AND lt.code = ?
+                ORDER BY lt.name ASC
+            `, [sectionCodes,level_type_code]);
+            
+            if(!sectionTypes.length===0) {
+                return ({
+                    type: "error",
+                    message: "No sections found for this school.",
+                    sectionTypes: [],
+                });
+            }
+            
+            return ({ 
+                type: "success", 
+                sectionTypes: sectionTypes
+            });
+        }
+    } 
+    catch (error) {
+        return({
             message: "Failed to fetch level types: " + error.message,
             type: "error",
         });
     }
 };
-module.exports = { addSectionType, addLevelType, addEducationType , getEducationTypes,getLevelTypes,getSectionTypes};
+const getClassTypes = async ({level_type_code}) => {
+    
+    try {
+        if (!level_type_code) {
+            return({
+                type: "error",
+                message: "Level is required"
+            });
+        }
+         const [classTypes] = await db.query(
+                "SELECT classes,code FROM level_types WHERE code = ?",
+                [level_type_code]
+            );
+            
+            if (!classTypes.length=== 0) {
+                return {
+                    type: "error",
+                    message: "No classes found.",
+                };
+            }
+            return {
+                type: "success",
+                classTypes: classTypes,
+            };
+        }
+    
+    catch (error) {
+        return({
+            message: "Failed to fetch level types: " + error.message,
+            type: "error",
+        });
+    }
+}
+
+module.exports = { addSectionType, addLevelType, addEducationType , getEducationTypes,getLevelTypes,getSectionTypes, getClassTypes};

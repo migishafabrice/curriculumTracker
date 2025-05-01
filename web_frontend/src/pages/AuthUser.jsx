@@ -2,15 +2,15 @@ import { jwtDecode } from 'jwt-decode';
 export const getCurrentUser = () => {
     const token = localStorage.getItem('AuthToken');
     
-    if (!token) return null;
-  
+    if(token)
+{
     try {
       const decoded = jwtDecode(token);
       const currentTime = Math.floor(Date.now() / 1000); 
       if (decoded.exp && decoded.exp < currentTime) {
        localStorage.removeItem('AuthToken'); 
        location.href = '/login';
-       return null;
+        return null;
       }
       return {
         userid: decoded.userid,
@@ -25,4 +25,5 @@ export const getCurrentUser = () => {
       console.error('Error decoding token:', error);
       return null;
     }
-  };
+  }
+};

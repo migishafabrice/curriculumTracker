@@ -6,9 +6,12 @@ import axios from 'axios';
 import useLoadSchools from './useLoadSchools';
 import Address from './Address';
 import Select from 'react-select';
-import { useEducationTpes, useLevelTypes, useSectionTypes } from './CourseInfo';
+import {fetchEducationTypes,fetchLevelTypes,fetchSectionTypes} from './AppFunctions';
+import { getCurrentUser } from './AuthUser';
+const user = getCurrentUser(); 
+const API_BASE_URL = 'http://localhost:5000';
+const AVATAR_SIZE = '50px';
 
-// Initial state for form
 const initialFormState = {
   name: '',
   phone: '',
@@ -24,7 +27,6 @@ const initialFormState = {
   }
 };
 
-// Form reducer for complex state management
 const formReducer = (state, action) => {
   switch (action.type) {
     case 'UPDATE_FIELD':
@@ -41,106 +43,63 @@ const formReducer = (state, action) => {
   }
 };
 
-// Custom hook for school sections management
-
 const useSchoolSections = () => {
   const [sections, setSections] = useState([]);
   
   const addSection = useCallback((section) => {
     if (!section.level) throw new Error('Level is required');
-    
-    setSections(prev => [...prev, {
-      ...section,
-      id: Date.now() // Use timestamp as temporary ID
-    }]);
+    setSections(prev => [...prev, { ...section, id: Date.now() }]);
   }, []);
     
   const removeSection = useCallback((id) => {
     setSections(prev => prev.filter(s => s.id !== id));
   }, []);
   
-  const groupSections = useCallback(() => {
+  const groupSections = useCallback((sections) => {
     return sections.reduce((groups, section) => {
-      if (!groups[section.education_type]) {
-        groups[section.education_type] = {
-          label: section.education_type_label,
-          levels: {}
-        };
+      const { education_type, education_type_label, level, level_label, option_label } = section;
+      
+      if (!groups[education_type]) {
+        groups[education_type] = { label: education_type_label, levels: {} };
       }
       
-      if (!groups[section.education_type].levels[section.level]) {
-        groups[section.education_type].levels[section.level] = {
-          label: section.level_label,
-          sections: []
-        };
+      if (!groups[education_type].levels[level]) {
+        groups[education_type].levels[level] = { label: level_label, sections: [] };
       }
       
-      groups[section.education_type].levels[section.level].sections.push({
+      groups[education_type].levels[level].sections.push({
         ...section,
-        label: section.option_label || 'General'
+        label: option_label || 'General'
       });
       
       return groups;
     }, {});
-  }, [sections]);
+  }, []);
   
-  return { 
+  return {
     sections, 
     addSection, 
     removeSection, 
     groupSections, 
-    setSections // This is now properly returned
+    setSections
   };
 };
+
 const ManageSchools = () => {
-  // Form state
- 
   const [formData, dispatch] = useReducer(formReducer, initialFormState);
   const [modal, setModal] = useState(false);
   const [notification, setNotification] = useState({ message: null, type: null });
-  
-;
-  
-  // School sections
-  const { sections, addSection, removeSection, groupSections, setSections } = useSchoolSections();
-  const groupedSections = useMemo(() => groupSections(), [groupSections]);
-  
-  // Load data hooks
-  const { schools, notice, loadSchools } = useLoadSchools();
-  const { educationTypes, educationNotification,fetchEducationTypes } = useEducationTpes();
-  const { levelTypes,levelNotification,fetchLevelTypes } = useLevelTypes(formData.education_type);
   const [currentSection, setCurrentSection] = useState({ level: '', option: '' });
-  const { sectionTypes,sectionNotification,fetchSectionTypes } = useSectionTypes(currentSection.level);
+  const [educationTypes, setEducationTypes] = useState([]);
+  const [levelTypes, setLevelTypes] = useState([]);
+  const [sectionTypes, setSectionTypes] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Handle notifications
-  useEffect(() => {
-    if(educationNotification) setNotification(educationNotification);
-    if (levelNotification) setNotification(levelNotification);
-    if(sectionNotification) setNotification(sectionNotification);
-    if (notice) setNotification(notice);
-  }, [educationNotification, levelNotification, notice, sectionNotification]);
+  const { schools, notice, loadSchools } = useLoadSchools();
+  const { sections, addSection, removeSection, groupSections, setSections } = useSchoolSections();
 
-  // Initial load
-  // Fetch education types only once on mount
-useEffect(() => {
-  fetchEducationTypes();
-  loadSchools();
-}, [fetchEducationTypes, loadSchools]); // Include dependencies
+  const groupedSections = useMemo(() => groupSections(sections), [groupSections, sections]);
 
-// Fetch level types only when education type changes
-useEffect(() => {
-  if (formData.education_type) {
-    fetchLevelTypes(formData.education_type);
-  }
-}, [formData.education_type, fetchLevelTypes]);
-
-// Fetch section types only when level changes
-useEffect(() => {
-  if (currentSection.level) {
-    fetchSectionTypes(currentSection.level);
-  }
-}, [currentSection.level, fetchSectionTypes]);
-  // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
     dispatch({ type: 'UPDATE_FIELD', field: name, value });
@@ -152,21 +111,95 @@ useEffect(() => {
 
   const handleSelectChange = useCallback((name, selectedOption) => {
     const value = selectedOption ? selectedOption.value : '';
-    
     if (name === 'education_type') {
       dispatch({ type: 'UPDATE_FIELD', field: name, value });
     } else {
-      setCurrentSection(prev => ({
-        ...prev,
-        [name]: value,
-        ...(name === 'level' ? { option: '' } : {})
-      }));
-    }
-  }, []);
+      setCurrentSection(prev => {
+        const updatedSection = {
+          ...prev,
+          [name]: value,
+          ...(name === 'level' ? { option: '' } : {}),
+          ...(name === 'option' ? { option: value } : {})
+        };
+
+        return updatedSection;
+      });
+        
+       
+      }
+      }, []);
 
   const handleAddressChange = useCallback((field, value) => {
     dispatch({ type: 'UPDATE_ADDRESS', field, value });
   }, []);
+
+  const fetchLevelTypesMemoized = useCallback(async (educationType) => {
+    if (!educationType) return;
+    try {
+      setIsLoading(true);
+      const levels = await fetchLevelTypes(educationType,user?.role === "School" ? user.userid : "");
+      setLevelTypes(levels.map(({code, name}) => ({ value: code, label: name })));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch level types', type: 'error' });
+      console.error("Failed to fetch level types:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchSectionTypesMemoized = useCallback(async (level) => {
+    if (!level) return;
+    try {
+      setIsLoading(true);
+      const sections = await fetchSectionTypes(level,user?.role === "School" ? user.userid : "");
+      setSectionTypes(sections.map(({code, name}) => ({ value: code, label: name })));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch section types', type: 'error' });
+      console.error("Failed to fetch section types:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (notice?.message) {
+      setNotification(notice);
+    }
+  }, [notice]);
+useEffect(() => {
+  loadSchools();
+}, [loadSchools]);
+  useEffect(() => {
+    const loadEducationTypes = async () => {
+      try {
+        setIsLoading(true);
+        const types = await fetchEducationTypes(user?.role === "School" ? user.userid : "");
+        setEducationTypes(types.map(({code, name}) => ({
+          value: code,
+          label: name
+        })));
+      } catch (err) {
+        setNotification({ message: 'Failed to fetch education types', type: 'error' });
+        console.error("Failed to fetch education types:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEducationTypes();
+  }, []);
+
+  useEffect(() => {
+    if (formData.education_type) {
+      fetchLevelTypesMemoized(formData.education_type);
+    }
+  }, [formData.education_type, fetchLevelTypesMemoized]);
+
+  useEffect(() => {
+    if (currentSection.level) {
+      fetchSectionTypesMemoized(currentSection.level);
+    }
+  }, [currentSection.level, fetchSectionTypesMemoized]);
 
   const handleAddSection = useCallback(() => {
     if (!currentSection.level) {
@@ -179,11 +212,8 @@ useEffect(() => {
       return;
     }
 
-    // Check for duplicate section
-    const sectionExists = sections.some(
-      section => 
-        section.level === currentSection.level && 
-        section.option === currentSection.option
+    const sectionExists = sections.some(s => 
+      s.level === currentSection.level && s.option === currentSection.option
     );
 
     if (sectionExists) {
@@ -191,7 +221,6 @@ useEffect(() => {
       return;
     }
 
-    // Get labels for display purposes
     const educationTypeLabel = educationTypes.find(et => et.value === formData.education_type)?.label || formData.education_type;
     const levelLabel = levelTypes.find(lt => lt.value === currentSection.level)?.label || currentSection.level;
     const optionLabel = sectionTypes?.find(st => st.value === currentSection.option)?.label || currentSection.option || 'General';
@@ -204,24 +233,22 @@ useEffect(() => {
       option_label: optionLabel
     });
 
-    // Reset current section selection
     setCurrentSection({ level: '', option: '' });
   }, [currentSection, educationTypes, formData.education_type, levelTypes, sections, sectionTypes, addSection]);
 
-  // Prepare sections for API in the format section1, section2, etc.
   const prepareSectionsForApi = useCallback(() => {
-    return sections.map(section => ({
-      education_type: section.education_type,
-      level: section.level,
-      option: section.option,
+    return sections.map(({ education_type, level, option }) => ({
+      education_type,
+      level,
+      option
     }));
   }, [sections]);
 
-  // Form submission
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     try {
-      // Basic validation
+      setIsLoading(true);
+      
       if (!formData.name || !formData.phone || !formData.email || !formData.education_type) {
         setNotification({ message: 'Please fill all required fields', type: 'error' });
         return;
@@ -232,32 +259,26 @@ useEffect(() => {
         return;
       }
 
-      // Prepare form data
       const data = new FormData();
       data.append('name', formData.name);
       data.append('phone', formData.phone);
       data.append('email', formData.email);
-      // data.append('education_type', formData.education_type);
-      
-      // Add address
-      const address = `${formData.address.province} - ${formData.address.district} - ${formData.address.sector} - ${formData.address.cell} - ${formData.address.village}`;
-      data.append('address', address);
-      
-      // Add sections as section1, section2, etc.
-      const preparedSections = prepareSectionsForApi();
-      data.append('sections', JSON.stringify(preparedSections));
-      
-      // Add logo if exists
-      if (formData.logo) {
-        data.append('logo', formData.logo);
-      }
+      data.append('address', [
+        formData.address.province,
+        formData.address.district,
+        formData.address.sector,
+        formData.address.cell,
+        formData.address.village
+      ].join(' - '));
+      data.append('sections', JSON.stringify(prepareSectionsForApi()));
+      if (formData.logo) data.append('logo', formData.logo);
 
-      // Submit to server
-      const response = await axios.post('http://localhost:5000/school/addSchool', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const response = await axios.post(`${API_BASE_URL}/school/addSchool`, data, {
+        headers: { 
+            Authorization: `Bearer ${user.token}`
+         },
       });
 
-      // Handle response
       if (response.data.type === 'success') {
         setNotification({ message: response.data.message, type: 'success' });
         loadSchools();
@@ -269,38 +290,103 @@ useEffect(() => {
       }
     } catch (error) {
       setNotification({ message: `Error: ${error.message}`, type: 'error' });
+    } finally {
+      setIsLoading(false);
     }
-  }, [formData,sections, prepareSectionsForApi, loadSchools, dispatch, setModal, setSections]);
+  }, [formData, sections, prepareSectionsForApi, loadSchools, setSections]);
 
-  // Reset form
   const resetForm = useCallback(() => {
     dispatch({ type: 'RESET' });
     setSections([]);
     setCurrentSection({ level: '', option: '' });
-  }, [ setSections ]);
+  }, [setSections]);
+
+  const SchoolTableRow = useCallback(({ school }) => (
+    <tr key={school.id}>
+      <td>
+        <div className="d-flex align-items-center">
+          <img 
+            src={`${API_BASE_URL}${school.logo}`} 
+            alt="School logo" 
+            className="avatar rounded-circle"
+            style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}
+            onError={(e) => e.target.src = '/default-school-logo.png'}
+          />
+          <div className="ms-3">
+            <div className="fw-bold">{school.name}</div>
+          </div>
+        </div>
+      </td>
+      <td>{school.telephone}</td>
+      <td>{school.email}</td>
+      <td>{school.address}</td>
+      <td>{school.section_types}</td>
+      <td>
+        <span className={`badge ${school.active ? 'bg-success' : 'bg-danger'} status-badge`}>
+          {school.active ? "Active" : "Inactive"}
+        </span>
+      </td>
+      <td>
+        <button className="btn btn-sm btn-outline-primary me-2">
+          <i className="fas fa-edit"></i>
+        </button>
+        <button className="btn btn-sm btn-outline-danger">
+          <i className="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>
+  ), []);
+
+  const SectionBadge = useCallback(({ section }) => (
+    <span className="badge bg-primary d-inline-flex align-items-center me-2 mb-2">
+      {section.label}
+      <button 
+        type="button" 
+        className="btn-close btn-close-white ms-2" 
+        onClick={() => removeSection(section.id)}
+        aria-label="Remove"
+      />
+    </span>
+  ), [removeSection]);
 
   return (
     <>
-      {notification.message && <ToastMessage message={notification.message} type={notification.type} />}
+      {notification.message && (
+        <ToastMessage 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification({ message: null, type: null })}
+        />
+      )}
+      
       <Sidebar />
+      
       <div className="page-content">
         <div id="Schools-page" className="page">
-          <div className="page-header">
+          <div className="page-header d-flex justify-content-between align-items-center">
             <h1 className="h2">Schools Management</h1>
-            <div>
-              <button className="btn btn-primary" onClick={() => setModal(true)}>
-                <i className="fas fa-plus"></i> Add New School
-              </button>
-            </div>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setModal(true)}
+              aria-label="Add new school"
+              disabled={isLoading}
+            >
+              <i className="fas fa-plus me-2"></i> Add New School
+            </button>
           </div>
           
-          {/* Schools List */}
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="card-title mb-0">Schools List</h5>
             </div>
-            {schools.length > 0 ? (
-              <div className="card-body">
+            <div className="card-body">
+              {isLoading ? (
+                <div className="text-center">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : schools.length > 0 ? (
                 <div className="table-responsive">
                   <table className="table table-hover">
                     <thead>
@@ -315,242 +401,234 @@ useEffect(() => {
                       </tr>
                     </thead>
                     <tbody>
-                      {schools.map((school) => (
-                        <tr key={school.id}>
-                          <td>
-                            <div className="d-flex align-items-center">
-                              <img src={`http://127.0.0.1:5000${school.logo}`} alt="Avatar" className="avatar" />
-                              <div>
-                                <div className="fw-bold">{school.name}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td>{school.telephone}</td>
-                          <td>{school.email}</td>
-                          <td>{school.address}</td>
-                          <td>{school.section_types}</td>
-                          <td>
-                            <span className={school.active ? "badge bg-success status-badge" : "badge bg-danger status-badge"}>
-                              {school.active ? "Active" : "Inactive"}
-                            </span>
-                          </td>
-                          <td>
-                            <button className="btn btn-sm btn-outline-primary">
-                              <i className="fas fa-edit"></i>
-                            </button>
-                            <button className="btn btn-sm btn-outline-danger">
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          </td>
-                        </tr>
+                      {schools.map(school => (
+                        <SchoolTableRow key={school.id} school={school} />
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            ) : (
-              <div className="card-body">
-                <p>No schools found.</p>
-              </div>
-            )}
+              ) : (
+                <p className="text-muted">No schools found.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Add School Modal */}
-      <div className="modal" style={{ display: modal ? 'block' : 'none', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <div className="modal-dialog modal-lg">
-          <div className="modal-content">
-            <div className="modal-header bg-primary text-white">
-              <h5 className="modal-title">Add New School</h5>
-              <button type="button" className="btn-close btn-close-white" onClick={() => setModal(false)}></button>
-            </div>
-            <div className="modal-body">
-              <form id="SchoolForm" onSubmit={handleSubmit}>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="form-control"
-                        id="SchoolName"
-                        placeholder="Name"
-                        required
-                      />
-                      <label htmlFor="SchoolName"><i className="fas fa-user me-2"></i>Name</label>
+      {modal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-black text-white">
+                <h5 className="modal-title">Add New School</h5>
+                <button 
+                  type="button" 
+                  className="btn-close btn-close-white" 
+                  onClick={() => { setModal(false); resetForm(); }}
+                  aria-label="Close"
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="modal-body">
+                <form id="SchoolForm" onSubmit={handleSubmit}>
+                  <div className="row mb-3">
+                    <div className="col-md-6">
+                      <div className="form-floating mb-3">
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          className="form-control"
+                          id="SchoolName"
+                          placeholder="Name"
+                          required
+                          disabled={isLoading}
+                        />
+                        <label htmlFor="SchoolName">
+                          <i className="fas fa-user me-2"></i>Name
+                        </label>
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="form-floating mb-3">
+                        <input
+                          type="text"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          className="form-control"
+                          id="SchoolPhone"
+                          placeholder="Telephone"
+                          required
+                          disabled={isLoading}
+                        />
+                        <label htmlFor="SchoolPhone">
+                          <i className="fas fa-phone me-2"></i>Phone
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input
-                        type="text"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="form-control"
-                        id="SchoolPhone"
-                        placeholder="Telephone"
-                        required
-                      />
-                      <label htmlFor="SchoolPhone"><i className="fas fa-phone me-2"></i>Phone</label>
+                  
+                  <div className="row mb-3">
+                    <div className="col-md-6">
+                      <div className="form-floating mb-3">
+                        <input
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          className="form-control"
+                          id="SchoolEmail"
+                          placeholder="Email"
+                          required
+                          disabled={isLoading}
+                        />
+                        <label htmlFor="SchoolEmail">
+                          <i className="fas fa-envelope me-2"></i>Email
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className="form-control"
-                        id="SchoolEmail"
-                        placeholder="Email"
-                        required
-                      />
-                      <label htmlFor="SchoolEmail"><i className="fas fa-envelope me-2"></i>Email</label>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <label htmlFor="CourseCategory">
-                      <i className="fas fa-tags me-2"></i>Education Type
-                    </label>
-                    <div className="mb-3">
+                    <div className="col-md-6">
+                      <label htmlFor="CourseCategory" className="form-label">
+                        <i className="fas fa-tags me-2"></i>Education Type
+                      </label>
                       <Select
                         id="CourseCategory"
-                        isClearable={true}
+                        isClearable
                         options={educationTypes}
                         onChange={(selected) => handleSelectChange("education_type", selected)}
                         value={educationTypes.find(opt => opt.value === formData.education_type)}
                         placeholder="Select Education Type"
                         required
+                        isDisabled={isLoading}
                       />
                     </div>
                   </div>
-                </div>
 
-                {/* School Sections Management */}
-                <div className="mb-4 border-top pt-3">
-                  <h5 className="mb-3">School Sections</h5>
-                  
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <label htmlFor="CourseTitle">
-                        <i className="fas fa-level-up-alt me-2"></i>Education Level
-                      </label>
-                      <div className="mb-3">
+                  <div className="mb-4 border-top pt-3">
+                    <h5 className="mb-3">School Sections</h5>
+                    
+                    <div className="row mb-3">
+                      <div className="col-md-6">
+                        <label htmlFor="CourseGrade" className="form-label">
+                          <i className="fas fa-level-up-alt me-2"></i>Education Level
+                        </label>
                         <Select
                           id="CourseGrade"
-                          isClearable={true}
+                          isClearable
                           options={levelTypes}
                           onChange={(selected) => handleSelectChange("level", selected)}
-                          placeholder="Select Level"
                           value={levelTypes.find(opt => opt.value === currentSection.level)}
+                          placeholder="Select Level"
+                          isDisabled={isLoading || !formData.education_type}
                         />
                       </div>
-                    </div>
-                   
-                    <div className="col-md-6">
-                      <label htmlFor="CourseSection">
-                        <i className="fas fa-th-large me-2"></i>Education Option
-                      </label>
-                      <div className="mb-3">
+                     
+                      <div className="col-md-6">
+                        <label htmlFor="CourseSection" className="form-label">
+                          <i className="fas fa-th-large me-2"></i>Education Option
+                        </label>
                         <Select
                           id="CourseSection"
-                          isClearable={true}
+                          isClearable
                           options={sectionTypes}
                           onChange={(selected) => handleSelectChange("option", selected)}
-                          placeholder="Select Option"
                           value={sectionTypes.find(opt => opt.value === currentSection.option)}
+                          placeholder="Select Option"
+                          isDisabled={isLoading || !currentSection.level}
                         />
                       </div>
                     </div>
+
+                    <div className="mb-3">
+                      <button 
+                        type="button" 
+                        className="btn btn-primary"
+                        onClick={handleAddSection}
+                        disabled={!currentSection.level || !formData.education_type || isLoading}
+                      >
+                        {isLoading ? (
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        ) : (
+                          <i className="fas fa-plus me-2"></i>
+                        )}
+                        Add to School Sections
+                      </button>
+                    </div>
+
+                    {sections.length > 0 && (
+                      <div className="mt-4">
+                        <h6>Selected School Sections</h6>
+                        <div className="d-flex flex-wrap">
+                          {Object.entries(groupedSections).map(([eduType, eduTypeData]) => (
+                            <div key={eduType} className="w-100 mb-3">
+                              <h6 className="bg-light p-2 rounded">{eduTypeData.label}</h6>
+                              {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
+                                <div key={level} className="ms-3 mb-3">
+                                  <h6 className="text-muted">{levelData.label}</h6>
+                                  <div className="d-flex flex-wrap ms-3">
+                                    {levelData.sections.map(section => (
+                                      <SectionBadge key={section.id} section={section} />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  <Address
+                    address={formData.address}
+                    onChange={handleAddressChange}
+                    disabled={isLoading}
+                  />
 
                   <div className="mb-3">
-                    <button 
-                      type="button" 
-                      className="btn btn-primary"
-                      onClick={handleAddSection}
-                      disabled={!currentSection.level || !formData.education_type}
-                    >
-                      <i className="fas fa-plus me-2"></i>Add to School Sections
-                    </button>
+                    <label htmlFor="SchoolPhoto" className="form-label">
+                      <i className="fas fa-image me-2"></i>Upload Logo
+                    </label>
+                    <input
+                      className="form-control"
+                      type="file"
+                      id="SchoolPhoto"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      disabled={isLoading}
+                    />
                   </div>
 
-                  {sections.length > 0 && (
-                    <div className="mt-4">
-                      <h6>Selected School Sections</h6>
-                      <div className="table-responsive">
-                        {Object.entries(groupedSections).map(([eduType, eduTypeData]) => (
-                          <div key={eduType} className="mb-4">
-                            <h6 className="bg-light p-2">{eduTypeData.label}</h6>
-                            {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
-                              <div key={level} className="ms-3 mb-3">
-                                <h6 className="text-muted">{levelData.label}</h6>
-                                <div className="d-flex flex-wrap gap-2 ms-3">
-                                  {levelData.sections.map((section) => (
-                                    <span key={section.id} className="badge bg-primary d-inline-flex align-items-center">
-                                      {section.label}
-                                      <button 
-                                        type="button" 
-                                        className="btn-close btn-close-white ms-2" 
-                                        onClick={() => removeSection(section.id)}
-                                        aria-label="Remove"
-                                      />
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Address Information */}
-                               
-                <Address
-  address={formData.address} 
-  onChange={(field, value) => handleAddressChange(field, value)} 
-/>
-
-                {/* Logo Upload */}
-                <div className="mb-3">
-                  <label htmlFor="SchoolPhoto" className="form-label">
-                    <i className="fas fa-image me-2"></i>Upload Logo
-                  </label>
-                  <input
-                    className="form-control"
-                    name="logo"
-                    onChange={handleFileChange}
-                    type="file"
-                    id="SchoolPhoto"
-                    accept="image/*"
-                  />
-                </div>
-
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => { setModal(false); resetForm(); }}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Save School
-                  </button>
-                </div>
-              </form>
+                  <div className="modal-footer">
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => { setModal(false); resetForm(); }}
+                      disabled={isLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      ) : null}
+                      Save School
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 };
 
-export default ManageSchools;
+export default React.memo(ManageSchools);

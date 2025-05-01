@@ -8,8 +8,8 @@ const {
     getEducationTypes,
     getLevelTypes,
     addSectionType,
-    getSectionTypes
-    
+    getSectionTypes,
+    getClassTypes,   
 } = require('../controllers/departmentController');
 router.post('/education-type',jwtMiddleware, addEducationType);
 router.post('/education-types', jwtMiddleware, async (req, res) => {
@@ -38,6 +38,31 @@ router.post('/level-types', jwtMiddleware, async (req, res) => {
     }
 });
 router.post('/section-type',jwtMiddleware, addSectionType);
-router.get('/section-types',jwtMiddleware, getSectionTypes);
-
+router.post('/section-types', jwtMiddleware, async (req, res) => {
+    try {
+        const { level_type_code, school_code } = req.body;
+        const result = await getSectionTypes({ level_type_code, school_code });
+        if (result.type === 'error') {
+            return res.status(400).json({ message: result.message, type:"error" });
+        }
+        
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+});
+router.post('/class-types', jwtMiddleware, async(req, res) => {
+    try {
+        const { level_type_code } = req.body;
+        const result = await getClassTypes({ level_type_code });
+        
+        if (result.type === 'error') {
+            return res.status(400).json({ message: result.message, type:"error" });
+        }
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+}
+);
 module.exports = router;

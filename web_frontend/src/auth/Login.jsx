@@ -6,6 +6,7 @@ const Login = () => {
     const [username,setUsername]=useState("");
     const [password,setPassword]=useState("");
     const [notification,setNotification]=useState({message:"",type:""});
+    const [isVisible,setVisible]=useState(false);
     const Navigate=useNavigate();
     const handleInputChange = (e) => {
         if (!e || !e.target) {
@@ -65,6 +66,17 @@ const Login = () => {
         setNotification({message:"Login failed:" +error.message,type:"error"});
     }
     }
+    const showPassword = (e) => {
+        e.preventDefault();
+        const passwordField = document.getElementById("password");
+        if (passwordField.type === "password") {
+            passwordField.type = "text";
+            setVisible(true);
+        } else {
+            passwordField.type = "password";
+            setVisible(false);
+        }
+    };
     return (
         <>
        {notification.message && <ToastMessage message={notification.message} type={notification.type} />}
@@ -85,8 +97,11 @@ const Login = () => {
                     <div className="mb-3">
                         <div className="input-group">
                             <span className="input-group-text"><i className="fas fa-lock"></i></span>
-                            <input type="password" name='password' onChange={handleInputChange} className="form-control" id="password" placeholder="Password"/>
+                            <input type="password" name='password' id="password" onChange={handleInputChange} className="form-control" placeholder="Password"/>
+                            <button className="btn btn-sm btn-outline-info" onClick={showPassword}>
+                            <i className={isVisible ? "fas fa-eye-slash" : "fas fa-eye"}></i></button>
                         </div>
+                        
                     </div>
                     <div className="mb-3 form-check">
                         <input type="checkbox" className="form-check-input" id="remember"/>

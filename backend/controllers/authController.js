@@ -45,6 +45,7 @@ const validateUser = async (username, password) => {
               role: user.role
             };
           }
+          
           const passwordMatch = await argon.verify(user.password, password);
           if (!passwordMatch) {
             console.log(`Invalid password for ${username} in ${query.table}`);

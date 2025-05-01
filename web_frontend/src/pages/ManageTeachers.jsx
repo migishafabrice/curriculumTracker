@@ -373,8 +373,8 @@ const ManageTeachers = () => {
                                 {schools.find(s => s.code === teacher.school)?.name || 'N/A'}
                               </td>
                               <td>
-                                <span className={`badge ${teacher.status === 'active' ? 'bg-success' : 'bg-warning'} status-badge`}>
-                                  {teacher.status === 'active' ? 'Active' : 'On Leave'}
+                                <span className={`badge ${teacher.active === 1 ? 'bg-success' : 'bg-warning'} status-badge`}>
+                                  {teacher.active === 1 ? 'Active' : 'Deactivated'}
                                 </span>
                               </td>
                               <td>
@@ -446,7 +446,7 @@ const ManageTeachers = () => {
       <div className="modal fade" id="addTeacherModal" tabIndex="-1" aria-labelledby="addTeacherModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
-            <div className="modal-header bg-primary text-white">
+            <div className="modal-header bg-black text-white">
               <h5 className="modal-title" id="addTeacherModalLabel">Add New Teacher</h5>
               <button 
                 type="button" 

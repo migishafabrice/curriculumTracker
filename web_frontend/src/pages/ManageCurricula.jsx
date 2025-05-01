@@ -1,231 +1,264 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "./Sidebar";
 import Select from "react-select";
 import axios from "axios";
 import ToastMessage from "../ToastMessage";
+import { fetchEducationTypes, fetchLevelTypes, fetchSectionTypes, fetchClassTypes } from "./AppFunctions";
+import { getCurrentUser } from "./AuthUser";
+
+const user = getCurrentUser();
 
 const ManageCurricula = () => {
-  // State for form data
+  // Form state
   const [formData, setFormData] = useState({
     name: "",
     education_type: "",
     level: "",
-    duration:0,
+    duration: 0,
     option: "",
     class: "",
-    code:"",
+    code: "",
     description: "",
     issued_on: "",
     document: null
   });
-  const [hasSection, setHasSection] = useState(false);
-  const [notification, setNotification] = useState({ message: "", type: "" });
 
-  // State for dropdown options
-  const [educationTypes, setEducationTypes] = useState([]);
-  const [levels, setLevels] = useState([]);
-  const [options, setOptions] = useState([]);
-  const [classes, setClasses] = useState([]);
+  // UI state
+  const [notification, setNotification] = useState({ message: "", type: "" });
+  const [showCourseModal, setShowCourseModal] = useState(false);
+  const [showStructureModal, setShowStructureModal] = useState(false);
+
+  // Dropdown options state
+  const [dropdownOptions, setDropdownOptions] = useState({
+    educationTypes: [],
+    levels: [],
+    sections: [],
+    classes: []
+  });
+
+  // Loading states
   const [isLoading, setIsLoading] = useState({
     educationTypes: false,
     levels: false,
-    options: false,
-    classes: false
+    sections: false,
+    classes: false,
+    submitting: false
   });
- const [CourseModal,showCourseModal]=useState(false);
-  // State for Course structure
-  const [CourseStructure, setCourseStructure] = useState([]);
+
+  // Course structure state
+  const [courseStructure, setCourseStructure] = useState([]);
   const [currentChapter, setCurrentChapter] = useState("");
   const [currentSubChapter, setCurrentSubChapter] = useState("");
   const [currentUnit, setCurrentUnit] = useState("");
   const [inputMethod, setInputMethod] = useState("");
-  const [showStructureModal, setShowStructureModal] = useState(false);
 
+  // Fetch education types on mount
   useEffect(() => {
-    fetchEducationTypes();
+    const loadEducationTypes = async () => {
+      setIsLoading(prev => ({ ...prev, educationTypes: true }));
+      try {
+        const types = await fetchEducationTypes(user?.role === "School" ? user.userid : "");
+        setDropdownOptions(prev => ({
+          ...prev,
+          educationTypes: types.map(({ code, name }) => ({ value: code, label: name }))
+        }));
+      } catch (err) {
+        setNotification({ message: 'Failed to fetch education types', type: 'error' });
+        console.error("Failed to fetch education types:", err);
+      } finally {
+        setIsLoading(prev => ({ ...prev, educationTypes: false }));
+      }
+    };
+
+    loadEducationTypes();
   }, []);
 
-  const fetchEducationTypes = async () => {
-    setIsLoading(prev => ({ ...prev, educationTypes: true }));
-    try {
-      const response = await axios.get("http://localhost:5000/department/education-types");
-      setEducationTypes(response.data.educationTypes.map(item => ({
-        value: item.code,
-        label: item.name
-      })));
-    } catch (error) {
-      console.error("Error fetching education types:", error);
-    } finally {
-      setIsLoading(prev => ({ ...prev, educationTypes: false }));
+  // Fetch levels when education type changes
+  const fetchLevels = useCallback(async (educationType) => {
+    if (!educationType) {
+      setDropdownOptions(prev => ({ ...prev, levels: [], sections: [], classes: [] }));
+      setFormData(prev => ({ ...prev, level: "", option: "", class: "" }));
+      return;
     }
-  };
 
-  const fetchLevels = async (educationTypeId) => {
-    if (!educationTypeId) return;
-    
     setIsLoading(prev => ({ ...prev, levels: true }));
     try {
-      const response = await axios.get(
-        `http://localhost:5000/department/level-types?education_type_code=${educationTypeId}`
-      );
-      setLevels(response.data.levelTypes.map(item => ({
-        value: item.code,
-        label: item.name
-      })));
-      setOptions([]);
-      setClasses([]);
-      setFormData(prev => ({
+      const levels = await fetchLevelTypes(educationType, user?.role === "School" ? user.userid : "");
+      setDropdownOptions(prev => ({
         ...prev,
-        level: "",
-        option: "",
-        class: ""
+        levels: levels.map(({ code, name }) => ({ value: code, label: name })),
+        sections: [],
+        classes: []
       }));
-    } catch (error) {
-      console.error("Error fetching levels:", error);
+      setFormData(prev => ({ ...prev, level: "", option: "", class: "" }));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch level types', type: 'error' });
+      console.error("Failed to fetch level types:", err);
     } finally {
       setIsLoading(prev => ({ ...prev, levels: false }));
     }
-  };
+  }, []);
 
-  const fetchOptions = async (levelId) => {
-    if (!levelId) return;
-    
-    setIsLoading(prev => ({ ...prev, options: true }));
-    try {
-      const response = await axios.get(`http://localhost:5000/department/section-types?level_type_code=${levelId}`);
-      if (response.data.message === "YES") {
-        setHasSection(true);
-        setOptions(response.data.sectionTypes.map(item => ({
-          value: item.code,
-          label: item.name
-        })));
-      } else {
-        setHasSection(false);
-      }
-      setClasses([]);
-      const allClasses = response.data.sectionTypes.flatMap(item => 
-        item.classes 
-          ? item.classes.split(',').map(c => c.trim())
-          : []
-      );
-      await fetchClasses(allClasses);
-      
-      setFormData(prev => ({
-        ...prev,
-        option: "",
-        class: ""
-      }));
-    } catch (error) {
-      console.error("Error fetching options:", error);
-    } finally {
-      setIsLoading(prev => ({ ...prev, options: false }));
+  // Fetch sections when level changes
+  const fetchSections = useCallback(async (level) => {
+    if (!level) {
+      setDropdownOptions(prev => ({ ...prev, sections: [], classes: [] }));
+      setFormData(prev => ({ ...prev, option: "", class: "" }));
+      return;
     }
-  };
 
-  const fetchClasses = async (allClasses) => {
-    if (!allClasses) return;
-    
+    setIsLoading(prev => ({ ...prev, sections: true }));
+    try {
+      const sections = await fetchSectionTypes(level, user?.role === "School" ? user.userid : "");
+      setDropdownOptions(prev => ({
+        ...prev,
+        sections: sections.map(({ code, name }) => ({ value: code, label: name })),
+        classes: []
+      }));
+      setFormData(prev => ({ ...prev, option: "", class: "" }));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch section types', type: 'error' });
+      console.error("Failed to fetch section types:", err);
+    } finally {
+      setIsLoading(prev => ({ ...prev, sections: false }));
+    }
+  }, []);
+
+  // Fetch classes when section changes
+  const fetchClasses = useCallback(async (level) => {
+    if (!level) {
+      setDropdownOptions(prev => ({ ...prev, classes: [] }));
+      setFormData(prev => ({ ...prev, class: "" }));
+      return;
+    }
+  
     setIsLoading(prev => ({ ...prev, classes: true }));
     try {
-      const classArray = typeof allClasses === 'string' 
-        ? allClasses.split(',').map(c => c.trim()).filter(c => c)
-        : Array.isArray(allClasses)
-          ? allClasses.map(c => String(c).trim()).filter(c => c)
-          : [];
-      setClasses(classArray.map(classe => ({
-        value: classe,
-        label: classe
-      })));
-      setFormData(prev => ({
+      const cl = await fetchClassTypes(level);
+      let classArray = [];
+      if (Array.isArray(cl)) {
+        classArray = cl.flatMap(item => {
+          if (item.classes) {
+            return item.classes.split(',').map(c => c.trim()).filter(c => c);
+          }
+          
+          return [];
+        });
+        
+      } else if (typeof cl === 'string') {
+        
+        classArray = cl.split(',').map(c => c.trim()).filter(c => c);
+        
+      }
+      
+      setNotification({ message: "classes"+classArray, type: "error" });
+      const uniqueClasses = [...new Set(classArray.map(c => String(c).trim()))].filter(c => c);
+      
+      setDropdownOptions(prev => ({
         ...prev,
-        class: ""
+        classes: uniqueClasses.map(item => ({
+          value: item,
+          label: item
+        }))
       }));
-    } catch (error) {
-      console.error("Error fetching classes:", error);
+      
+      setFormData(prev => ({ ...prev, class: "" }));
+    } catch (err) {
+      setNotification({ message: 'Failed to fetch class types', type: 'error' });
+      console.error("Failed to fetch class types:", err);
     } finally {
       setIsLoading(prev => ({ ...prev, classes: false }));
     }
-  };
+  }, []);
 
-  const handleInputChange = (e) => {
-    const { name, value} = e.target;
-   
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
-   
-};
-
-  const handleSelectChange = async (name, selectedOption) => {
+  // Handle select changes with proper chaining
+  const handleSelectChange = useCallback((name, selectedOption) => {
     const value = selectedOption ? selectedOption.value : "";
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const newData = { ...prev, [name]: value };
+      
+      if (name === "education_type") {
+        newData.level = "";
+        newData.option = "";
+        newData.class = "";
+        fetchLevels(value);
+      } else if (name === "level") {
+        newData.option = "";
+        newData.class = "";
+        fetchSections(value);
+      } else if (name === "option") {
+        newData.class = "";
+        fetchClasses(formData.level);
+      }
+      
+      return newData;
+    });
+  }, [fetchLevels, fetchSections, fetchClasses]);
 
-    if (name === "education_type") {
-      fetchLevels(value);
-    } 
-    if (name === "level") {
-      fetchOptions(value);
-    }
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handle file upload
   const handleFileChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      document: e.target.files[0]
-    }));
+    setFormData(prev => ({ ...prev, document: e.target.files[0] }));
   };
 
+  // Course structure management
   const addChapter = () => {
     if (!currentChapter.trim()) return;
-    const newChapter = {
+    setCourseStructure(prev => [...prev, {
       name: currentChapter,
       subChapters: []
-    };
-    setCourseStructure([...CourseStructure, newChapter]);
+    }]);
     setCurrentChapter("");
   };
 
   const addSubChapter = (chapterIndex) => {
     if (!currentSubChapter.trim()) return;
-    const updatedStructure = [...CourseStructure];
-    updatedStructure[chapterIndex].subChapters.push({
-      name: currentSubChapter,
-      units: []
+    setCourseStructure(prev => {
+      const updated = [...prev];
+      updated[chapterIndex].subChapters.push({
+        name: currentSubChapter,
+        units: []
+      });
+      return updated;
     });
-    setCourseStructure(updatedStructure);
     setCurrentSubChapter("");
   };
 
   const addUnit = (chapterIndex, subChapterIndex) => {
     if (!currentUnit.trim()) return;
-    const updatedStructure = [...CourseStructure];
-    updatedStructure[chapterIndex].subChapters[subChapterIndex].units.push(currentUnit);
-    setCourseStructure(updatedStructure);
+    setCourseStructure(prev => {
+      const updated = [...prev];
+      updated[chapterIndex].subChapters[subChapterIndex].units.push(currentUnit);
+      return updated;
+    });
     setCurrentUnit("");
   };
 
-  const removeItem = (type, chapterIndex, subChapterIndex = null, unitIndex = null) => {
-    const updatedStructure = [...CourseStructure];
-    
-    if (type === "chapter") {
-      updatedStructure.splice(chapterIndex, 1);
-    } else if (type === "subChapter") {
-      updatedStructure[chapterIndex].subChapters.splice(subChapterIndex, 1);
-    } else if (type === "unit") {
-      updatedStructure[chapterIndex].subChapters[subChapterIndex].units.splice(unitIndex, 1);
-    }
-    
-    setCourseStructure(updatedStructure);
+  const removeItem = (type, chapterIndex, subChapterIndex, unitIndex) => {
+    setCourseStructure(prev => {
+      const updated = [...prev];
+      if (type === "chapter") {
+        updated.splice(chapterIndex, 1);
+      } else if (type === "subChapter") {
+        updated[chapterIndex].subChapters.splice(subChapterIndex, 1);
+      } else if (type === "unit") {
+        updated[chapterIndex].subChapters[subChapterIndex].units.splice(unitIndex, 1);
+      }
+      return updated;
+    });
   };
 
+  // Form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    setIsLoading(prev => ({ ...prev, submitting: true }));
+
     try {
       const formValues = new FormData();
       formValues.append("name", formData.name);
@@ -237,49 +270,77 @@ const ManageCurricula = () => {
       formValues.append("class_type", formData.class);
       formValues.append("description", formData.description);
       formValues.append("issued_on", formData.issued_on);
-      formValues.append("inputMethod",inputMethod);
+      formValues.append("inputMethod", inputMethod);
+
       if (inputMethod === "Manual") {
-        formValues.append("structure", JSON.stringify(CourseStructure));
+        formValues.append("structure", JSON.stringify(courseStructure));
       }
+
       if (!formData.document) {
-        setNotification({message:"Course file not uploaded & it must be type PDF",type:"error"})
+        setNotification({ message: "Course file not uploaded & it must be type PDF", type: "error" });
         return;
       }
       formValues.append("document", formData.document);
-      
+
       const response = await axios.post("http://localhost:5000/Course/addCourse", formValues, {
-        headers: {
-          "Content-Type": "multipart/form-data"
-        }
+        headers: { "Content-Type": "multipart/form-data" }
       });
-    
+
       if (response.data.type === "success") {
-        setNotification({ message: response.data.message, type: response.data.type });
+        setNotification({ message: response.data.message, type: "success" });
         setCourseStructure([]);
         setShowStructureModal(false);
-      }      
-      showCourseModal(false);
+        setShowCourseModal(false);
+        setFormData({
+          name: "",
+          education_type: "",
+          level: "",
+          duration: 0,
+          option: "",
+          class: "",
+          code: "",
+          description: "",
+          issued_on: "",
+          document: null
+        });
+      }
     } catch (error) {
       console.error("Error creating Course:", error);
-      setNotification({ message: "Failed to add the Course" + error, type: "error" });
+      setNotification({ 
+        message: error.response?.data?.message || "Failed to add the Course", 
+        type: "error" 
+      });
+    } finally {
+      setIsLoading(prev => ({ ...prev, submitting: false }));
     }
   };
 
   return (
     <>
-      {notification.message && <ToastMessage message={notification.message} type={notification.type} />}
+      {notification.message && (
+        <ToastMessage 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification({ message: "", type: "" })}
+        />
+      )}
+      
       <Sidebar />
+      
       <div className="page-content">
-        <div id="Course-page" className="page">
-          <div className="page-header">
+        <div className="page">
+          <div className="page-header d-flex justify-content-between align-items-center">
             <h1 className="h2">Course Management</h1>
-            <div>
-              <button className="btn btn-primary" onClick={()=>showCourseModal(true)}>
-                <i className="fas fa-plus"></i> Add New Course
-              </button>
-            </div>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowCourseModal(true)}
+              disabled={isLoading.educationTypes}
+            >
+              <i className="fas fa-plus me-2"></i> Add New Course
+            </button>
           </div>
 
+          {/* Course List Table */}
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="card-title mb-0">Course List</h5>
@@ -305,324 +366,329 @@ const ManageCurricula = () => {
                       <td>John Smith</td>
                       <td>Mar 10, 2025</td>
                       <td>
-                        <button className="btn btn-sm btn-outline-primary"><i className="fas fa-edit"></i></button>
-                        <button className="btn btn-sm btn-outline-info"><i className="fas fa-eye"></i></button>
-                        <button className="btn btn-sm btn-outline-danger"><i className="fas fa-trash"></i></button>
+                        <div className="d-flex gap-2">
+                          <button className="btn btn-sm btn-outline-primary">
+                            <i className="fas fa-edit"></i>
+                          </button>
+                          <button className="btn btn-sm btn-outline-danger">
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <nav>
-                <ul className="pagination justify-content-end">
-                  <li className="page-item disabled"><a className="page-link" href="#">Previous</a></li>
-                  <li className="page-item active"><a className="page-link" href="#">1</a></li>
-                  <li className="page-item"><a className="page-link" href="#">2</a></li>
-                  <li className="page-item"><a className="page-link" href="#">Next</a></li>
-                </ul>
-              </nav>
             </div>
           </div>
         </div>
       </div>
 
       {/* Add Course Modal */}
-      {CourseModal && (
-      <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <div className="modal-dialog modal-lg">
-          <div className="modal-content">
-            <div className="modal-header bg-primary text-white">
-              <h5 className="modal-title">Add New Course</h5>
-              <button type="button" className="btn-close btn-close-white" onClick={()=>showCourseModal(false)}></button>
-            </div>
-            <div className="modal-body">
-              <form id="CourseForm" onSubmit={handleSubmit}>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <div className="form-floating mb-3">
-                      <input
-                        type="text"
-                        name="name"
-                        className="form-control"
-                        id="CourseTitle"
-                        placeholder="Course Title"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                      />
-                      <label htmlFor="CourseTitle">
-                        <i className="fas fa-book me-2"></i>Course Title
-                      </label>
+      {showCourseModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header bg-black text-white">
+                <h5 className="modal-title">Add New Course Curriculum</h5>
+                <button 
+                  type="button" 
+                  className="btn-close btn-close-white" 
+                  onClick={() => setShowCourseModal(false)}
+                  disabled={isLoading.submitting}
+                />
+              </div>
+              <div className="modal-body">
+                <form onSubmit={handleSubmit}>
+                  <div className="row mb-3">
+                    <div className="col-md-6">
+                      <div className="form-floating mb-3">
+                        <input
+                          type="text"
+                          name="name"
+                          className="form-control"
+                          placeholder="Course Title"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                          disabled={isLoading.submitting}
+                        />
+                        <label>
+                          <i className="fas fa-book me-2"></i>Course Title
+                        </label>
+                      </div>
                     </div>
+                    <div className="col-md-6">
+                      <div className="form-floating mb-3">
+                        <input
+                          type="text"
+                          name="code"
+                          className="form-control"
+                          placeholder="Course Code"
+                          value={formData.code}
+                          onChange={handleInputChange}
+                          required
+                          disabled={isLoading.submitting}
+                        />
+                        <label>
+                          <i className="fas fa-code me-2"></i>Course Code
+                        </label>
+                      </div>
+                    </div>
+                    
                   </div>
+
+                  <div className="row mb-3">
                   <div className="col-md-6">
-                  <label htmlFor="CourseCategory">
+                      <label className="form-label">
                         <i className="fas fa-tags me-2"></i>Education Type
                       </label>
-                    <div className="form-floating mb-3">
                       <Select
-                        id="CourseCategory"
-                        isClearable={true}
-                        options={educationTypes}
+                        isClearable
+                        options={dropdownOptions.educationTypes}
                         isLoading={isLoading.educationTypes}
                         onChange={(selected) => handleSelectChange("education_type", selected)}
+                        value={dropdownOptions.educationTypes.find(opt => opt.value === formData.education_type)}
                         placeholder="Select Education Type"
                         required
+                        isDisabled={isLoading.submitting}
                       />
                     </div>
-                  </div>
-                </div>
-
-                <div className="row mb-3">
-                  <div className={hasSection ? "col-md-6" : "col-md-12"}>
-                  <label htmlFor="CourseTitle">
+                    <div className="col-md-6">
+                      <label className="form-label">
                         <i className="fas fa-level-up-alt me-2"></i>Education Level
                       </label>
-                    <div className="form-floating mb-3">
                       <Select
-                        id="CourseGrade"
-                        isClearable={true}
-                        options={levels}
+                        isClearable
+                        options={dropdownOptions.levels}
                         isLoading={isLoading.levels}
                         onChange={(selected) => handleSelectChange("level", selected)}
-                        placeholder="Select Category"
-                        value={levels.find(opt => opt.value === formData.level)}
+                        value={dropdownOptions.levels.find(opt => opt.value === formData.level)}
+                        placeholder={formData.education_type ? "Select Level" : "Select Education Type first"}
+                        isDisabled={!formData.education_type || isLoading.submitting}
                         required
                       />
                     </div>
+                    
                   </div>
-                  {hasSection && (
-                    <div className="col-md-6">
-                       <label htmlFor="CourseSection">
+
+                  <div className="row mb-3">
+                  <div className="col-md-4">
+                      <label className="form-label">
                         <i className="fas fa-th-large me-2"></i>Education Option
                       </label>
-                      <div className="form-floating mb-3">
-                        <Select
-                          id="CourseSection"
-                          isClearable={true}
-                          options={options}
-                          isLoading={isLoading.options}
-                          onChange={(selected) => handleSelectChange("option", selected)}
-                          placeholder="Select Option"
-                          value={options.find(opt => opt.value === formData.option)}
-                          required
+                      <Select
+                        isClearable
+                        options={dropdownOptions.sections}
+                        isLoading={isLoading.sections}
+                        onChange={(selected) => handleSelectChange("option", selected)}
+                        value={dropdownOptions.sections.find(opt => opt.value === formData.option)}
+                        placeholder={formData.level ? "Select Option" : "Select Level first"}
+                        isDisabled={!formData.level || isLoading.submitting}
+                      />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label">
+                        <i className="fas fa-chalkboard me-2"></i>Class/Promotion
+                      </label>
+                      <Select
+                        isClearable
+                        options={dropdownOptions.classes}
+                        isLoading={isLoading.classes}
+                        onChange={(selected) => handleSelectChange("class", selected)}
+                        value={dropdownOptions.classes.find(opt => opt.value === formData.class)}
+                        placeholder={formData.option ? "Select Class" : "Select Option first"}
+                        isDisabled={!formData.option || isLoading.submitting}
+                        required
+                      />
+                    </div>
+                    <div className="col-md-4">
+                    <label>
+                          <i className="fas fa-clock me-2 mb-2"></i>Duration (weeks)
+                        </label>
+                      
+                        <input
+                          type="number"
+                          name="duration"
+                          className="form-control"
+                          placeholder="Duration"
+                          value={formData.duration}
+                          onChange={handleInputChange}
+                          disabled={isLoading.submitting}
                         />
+                        
+                     
+                    </div>
+                  </div>
+
+                  {/* Input Method Selection */}
+                  <div className="row mb-3">
+                    <div className="col-md-12">
+                      <div className="card">
+                        <div className="card-header">
+                          <h6>Course Structure Input Method</h6>
+                        </div>
+                        <div className="card-body">
+                          <div className="form-check form-check-inline">
+                            <input
+                              className="form-check-input"
+                              type="radio"
+                              name="inputMethod"
+                              id="autoExtract"
+                              value="auto"
+                              checked={inputMethod === "auto"}
+                              onChange={() => setInputMethod("auto")}
+                              disabled={isLoading.submitting}
+                            />
+                            <label className="form-check-label" htmlFor="autoExtract">
+                              Extract from Document
+                            </label>
+                          </div>
+                          <div className="form-check form-check-inline">
+                            <input
+                              className="form-check-input"
+                              type="radio"
+                              name="inputMethod"
+                              id="ManualInput"
+                              value="Manual"
+                              checked={inputMethod === "Manual"}
+                              onChange={() => setInputMethod("Manual")}
+                              disabled={isLoading.submitting}
+                            />
+                            <label className="form-check-label" htmlFor="ManualInput">
+                              Manual Input
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual Structure Input */}
+                  {inputMethod === "Manual" && (
+                    <div className="row mb-3">
+                      <div className="col-md-12">
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary mb-3"
+                          onClick={() => setShowStructureModal(true)}
+                          disabled={isLoading.submitting}
+                        >
+                          <i className="fas fa-edit me-2"></i>Define Course Structure
+                        </button>
+                        {courseStructure.length > 0 && (
+                          <div className="alert alert-info">
+                            <strong>Structure Preview:</strong> {courseStructure.length} chapters defined
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
-                </div>
-                <div className="row mb-3">
-                <div className="col-md-4">
-                  
-                    <div className="form-floating mb-3">
-                      <input
-                        id="CourseCode"
+
+                  {/* Description */}
+                  <div className="mb-3">
+                    <div className="form-floating">
+                      <textarea
                         className="form-control"
+                        style={{ height: "100px" }}
+                        placeholder="Description"
+                        name="description"
+                        value={formData.description}
                         onChange={handleInputChange}
-                        placeholder="Course code"
-                        value={formData.code}
                         required
+                        disabled={isLoading.submitting}
                       />
-                      <label htmlFor="CourseSection">
-                        <i className="fas fa-chalkboard me-2"></i>Course Code
+                      <label>
+                        <i className="fas fa-info-circle me-2"></i>Course Description
                       </label>
                     </div>
                   </div>
-                  <div className="col-md-4">
-                  <label htmlFor="CourseSection">
-                        <i className="fas fa-chalkboard me-2"></i>Promotion / Level
-                      </label>
-                    <div className="form-floating mb-3">
-                      <Select
-                        id="CourseClass"
-                        isClearable={true}
-                        options={classes}
-                        isLoading={isLoading.classes}
-                        onChange={(selected) => handleSelectChange("class", selected)}
-                        placeholder="Select Class / Promotion"
-                        value={classes.find(opt => opt.value === formData.class)}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="form-floating mb-3">
+
+                  {/* Issued Date */}
+                  <div className="mb-3">
+                    <div className="form-floating">
                       <input
-                      type="number"
-                      name="duration"
-                      className="form-control"
-                        id="CourseDuration"
+                        type="date"
+                        className="form-control"
+                        placeholder="Issued on"
+                        name="issued_on"
+                        value={formData.issued_on}
                         onChange={handleInputChange}
-                        placeholder="Duration"
-                        value={formData.duration}
+                        required
+                        disabled={isLoading.submitting}
                       />
-                     <label htmlFor="CourseDuration">
-                      <i className="fas fa-clock me-2"></i>Duration `Empty for whole year or number`
+                      <label>
+                        <i className="fas fa-calendar me-2"></i>Issued On
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Document Upload */}
+                  <div className="mb-3">
+                    <label className="form-label">
+                      <i className="fas fa-file-upload me-2"></i>Upload Course Document (PDF)
                     </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="row mb-3">
-                  <div className="col-md-12">
-                    <div className="card">
-                      <div className="card-header">
-                        <h6>Course - Curriculum Structure Input Method</h6>
-                      </div>
-                      <div className="card-body">
-                        <div className="form-check form-check-inline">
-                          <input
-                            className="form-check-input"
-                            type="radio"
-                            name="inputMethod"
-                            id="autoExtract"
-                            value="auto"
-                            checked={inputMethod === "auto"}
-                            onChange={() => setInputMethod("auto")}
-                          />
-                          <label className="form-check-label" htmlFor="autoExtract">
-                            Extract from Document
-                          </label>
-                        </div>
-                        <div className="form-check form-check-inline">
-                          <input
-                            className="form-check-input"
-                            type="radio"
-                            name="inputMethod"
-                            id="ManualInput"
-                            value="Manual"
-                            checked={inputMethod === "Manual"}
-                            onChange={() => setInputMethod("Manual")}
-                          />
-                          <label className="form-check-label" htmlFor="ManualInput">
-                            Manual Input
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {inputMethod === "Manual" && (
-                  <div className="row mb-3">
-                    <div className="col-md-12">
-                      <button
-                        type="button"
-                        className="btn btn-outline-primary"
-                        onClick={() => setShowStructureModal(true)}
-                      >
-                        <i className="fas fa-edit me-2"></i>Define Course Structure
-                      </button>
-                      {CourseStructure.length > 0 && (
-                        <div className="mt-3">
-                          <h6>Current Structure Preview:</h6>
-                          <div className="border p-2" style={{ maxHeight: "200px", overflowY: "auto" }}>
-                            {CourseStructure.map((chapter, chapterIndex) => (
-                              <div key={chapterIndex} className="mb-2">
-                                <strong>Chapter {chapterIndex + 1}: {chapter.name}</strong>
-                                {chapter.subChapters.map((subChapter, subChapterIndex) => (
-                                  <div key={subChapterIndex} className="ms-3">
-                                    <em>Sub-Chapter {subChapterIndex + 1}: {subChapter.name}</em>
-                                    {subChapter.units.map((unit, unitIndex) => (
-                                      <div key={unitIndex} className="ms-3">
-                                        - Unit {unitIndex + 1}: {unit}
-                                      </div>
-                                    ))}
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <div className="form-floating">
-                    <textarea
+                    <input
                       className="form-control"
-                      id="CourseDescription"
-                      style={{ height: "100px" }}
-                      placeholder="Description"
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileChange}
                       required
+                      disabled={isLoading.submitting}
                     />
-                    <label htmlFor="CourseDescription">
-                      <i className="fas fa-info-circle me-2"></i>Course Description
-                    </label>
                   </div>
-                </div>
 
-                <div className="mb-3">
-                  <div className="form-floating">
-                    <input type="date"
-                      className="form-control"
-                      id="CourseIssuedOn"
-                      placeholder="Issued on"
-                      name="issued_on"
-                      value={formData.issued_on}
-                      onChange={handleInputChange}
-                      required
-                    />
-                    <label htmlFor="CourseIssuedOn">
-                      <i className="fas fa-calendar me-2"></i>Issued On
-                    </label>
+                  <div className="modal-footer">
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowCourseModal(false)}
+                      disabled={isLoading.submitting}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary"
+                      disabled={isLoading.submitting}
+                    >
+                      {isLoading.submitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Saving...
+                        </>
+                      ) : "Save Course"}
+                    </button>
                   </div>
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="CourseDocument" className="form-label">
-                    <i className="fas fa-file-upload me-2"></i>Upload Course -Curriculum Document
-                  </label>
-                  <input
-                    className="form-control"
-                    type="file"
-                    id="CourseDocument"
-                    onChange={handleFileChange}
-                   name="document"
-                  />
-                </div>
-
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Save Course
-                  </button>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       )}
-      {/* Structure Modal */}
+
+      {/* Course Structure Modal */}
       {showStructureModal && (
-        <div className="modal" style={{ display: "block", backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-xl modal-dialog-centered">
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl modal-dialog-scrollable">
             <div className="modal-content">
               <div className="modal-header bg-primary text-white">
                 <h5 className="modal-title">Define Course Structure</h5>
-                <button
-                  type="button"
-                  className="btn-close btn-close-white"
+                <button 
+                  type="button" 
+                  className="btn-close btn-close-white" 
                   onClick={() => setShowStructureModal(false)}
-                ></button>
+                />
               </div>
               <div className="modal-body">
                 <div className="row">
                   <div className="col-md-4">
-                    <div className="card">
+                    <div className="card mb-4">
                       <div className="card-header">
                         <h6>Add Chapter</h6>
                       </div>
                       <div className="card-body">
-                        <div className="input-group mb-3">
+                        <div className="input-group">
                           <input
                             type="text"
                             className="form-control"
@@ -643,125 +709,117 @@ const ManageCurricula = () => {
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <h5>Course Structure</h5>
-                  {CourseStructure.length === 0 ? (
-                    <div className="alert alert-info">
-                      No chapters added yet. Start by adding a chapter above.
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-bordered">
-                        <thead>
-                          <tr>
-                            <th>Chapter</th>
-                            <th>Sub-Chapter</th>
-                            <th>Units</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {CourseStructure.map((chapter, chapterIndex) => (
-                            <React.Fragment key={chapterIndex}>
-                              <tr>
-                                <td rowSpan={chapter.subChapters.length > 0 ? chapter.subChapters.length + 1 : 2}>
-                                  {chapter.name}
+                {courseStructure.length === 0 ? (
+                  <div className="alert alert-info">
+                    No chapters added yet. Start by adding a chapter above.
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table table-bordered">
+                      <thead>
+                        <tr>
+                          <th>Chapter</th>
+                          <th>Sub-Chapter</th>
+                          <th>Units</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {courseStructure.map((chapter, chapterIndex) => (
+                          <React.Fragment key={chapterIndex}>
+                            <tr>
+                              <td rowSpan={chapter.subChapters.length + 1}>
+                                <strong>{chapter.name}</strong>
+                                <button
+                                  className="btn btn-sm btn-danger float-end"
+                                  onClick={() => removeItem("chapter", chapterIndex)}
+                                >
+                                  <i className="fas fa-trash"></i> Remove
+                                </button>
+                              </td>
+                            </tr>
+                            {chapter.subChapters.map((subChapter, subChapterIndex) => (
+                              <tr key={`${chapterIndex}-${subChapterIndex}`}>
+                                <td>
+                                  {subChapter.name}
                                   <button
                                     className="btn btn-sm btn-danger float-end"
-                                    onClick={() => removeItem("chapter", chapterIndex)}
+                                    onClick={() => removeItem("subChapter", chapterIndex, subChapterIndex)}
                                   >
-                                    Remove Chapter
+                                    <i className="fas fa-trash"></i>
                                   </button>
                                 </td>
-                                {chapter.subChapters.length === 0 && (
-                                  <td colSpan="3">
-                                    <em>No sub-chapters yet</em>
-                                  </td>
-                                )}
-                              </tr>
-                              {chapter.subChapters.map((subChapter, subChapterIndex) => (
-                                <tr key={`${chapterIndex}-${subChapterIndex}`}>
-                                  <td>
-                                    {subChapter.name}
-                                    <button
-                                      className="btn btn-sm btn-danger float-end"
-                                      onClick={() => removeItem("subChapter", chapterIndex, subChapterIndex)}
-                                    >
-                                      Remove
-                                    </button>
-                                  </td>
-                                  <td>
-                                    {subChapter.units.length > 0 ? (
-                                      <ul className="list-unstyled">
-                                        {subChapter.units.map((unit, unitIndex) => (
-                                          <li key={unitIndex}>
-                                            {unit}
-                                            <button
-                                              className="btn btn-sm btn-link text-danger"
-                                              onClick={() => removeItem("unit", chapterIndex, subChapterIndex, unitIndex)}
-                                            >
-                                              <i className="fas fa-times"></i>
-                                            </button>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <em>No units yet</em>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <div className="input-group mb-2">
-                                      <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        placeholder="Add unit"
-                                        value={currentUnit}
-                                        onChange={(e) => setCurrentUnit(e.target.value)}
-                                      />
-                                      <button
-                                        className="btn btn-sm btn-primary"
-                                        onClick={() => {
-                                          addUnit(chapterIndex, subChapterIndex);
-                                          setCurrentUnit("");
-                                        }}
-                                        disabled={!currentUnit.trim()}
-                                      >
-                                        Add
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                              <tr>
-                                <td colSpan="3">
-                                  <div className="input-group">
+                                <td>
+                                  {subChapter.units.length > 0 ? (
+                                    <ul className="list-unstyled mb-0">
+                                      {subChapter.units.map((unit, unitIndex) => (
+                                        <li key={unitIndex} className="d-flex justify-content-between align-items-center">
+                                          <span>{unit}</span>
+                                          <button
+                                            className="btn btn-sm btn-link text-danger"
+                                            onClick={() => removeItem("unit", chapterIndex, subChapterIndex, unitIndex)}
+                                          >
+                                            <i className="fas fa-times"></i>
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <em>No units yet</em>
+                                  )}
+                                </td>
+                                <td>
+                                  <div className="input-group input-group-sm mb-2">
                                     <input
                                       type="text"
                                       className="form-control"
-                                      placeholder="Add sub-chapter"
-                                      value={currentSubChapter}
-                                      onChange={(e) => setCurrentSubChapter(e.target.value)}
+                                      placeholder="Add unit"
+                                      value={currentUnit}
+                                      onChange={(e) => setCurrentUnit(e.target.value)}
                                     />
                                     <button
                                       className="btn btn-primary"
                                       onClick={() => {
-                                        addSubChapter(chapterIndex);
-                                        setCurrentSubChapter("");
+                                        addUnit(chapterIndex, subChapterIndex);
+                                        setCurrentUnit("");
                                       }}
-                                      disabled={!currentSubChapter.trim()}
+                                      disabled={!currentUnit.trim()}
                                     >
                                       Add
                                     </button>
                                   </div>
                                 </td>
                               </tr>
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                            ))}
+                            <tr>
+                              <td colSpan="3">
+                                <div className="input-group">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Add sub-chapter"
+                                    value={currentSubChapter}
+                                    onChange={(e) => setCurrentSubChapter(e.target.value)}
+                                  />
+                                  <button
+                                    className="btn btn-primary"
+                                    onClick={() => {
+                                      addSubChapter(chapterIndex);
+                                      setCurrentSubChapter("");
+                                    }}
+                                    disabled={!currentSubChapter.trim()}
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button

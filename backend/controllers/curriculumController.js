@@ -119,7 +119,43 @@ const addCurriculum = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message, type:'error' });
   }
 };
-
+const getCurriculumTypes = async ({education_type_code, level_type_code, section_type_code, class_type_code}) => {
+  try {
+    const query = `SELECT * FROM curriculum WHERE education_type_code = ? AND level_type_code = ? AND section_type_code = ? AND class_type_code = ?`;
+    const values = [education_type_code, level_type_code, section_type_code, class_type_code];
+    const [rows] = await db.query(query, values);
+    
+    if (rows.length === 0) {
+      return { message: 'No Curriculum - Course found', type: 'error' };
+    }
+    
+    return { curriculumTypes: rows, type: 'success' };
+  } catch (error) {
+    console.error('Error fetching curriculum types:', error);
+    return { message: error.message, type: 'error' };
+  }
+}
+const assignCurriculum = async ({teacherCode,courses,school}) => {
+  try {
+    
+    if (!teacherCode || !courses || school === 0) {
+      return res.status(400).json({ message: 'Teacher and at least one course are required', type: 'error' });
+    }
+    const teacherCourses = courses
+    ? JSON.stringify(courses.map(course => course.code))
+    : null;
+  const query = `INSERT INTO courses (teacher_code, curriculum_code, school_code) VALUES (?, ?, ?)`;
+  const [result]= await db.query(query, [teacherCode, teacherCourses, school]);
+    
+    if (result.affectedRows === 0) {
+      return ({ message: 'Failed to assign courses', type: 'error' });
+    }    
+   return ({ message: 'Courses assigned successfully', type: 'success' });
+  } catch (error) {
+    console.error('Error assigning courses:', error);
+    return ({ message: error.message, type: 'error' });
+  }
+};
 module.exports = { 
-  addCurriculum 
+  addCurriculum , getCurriculumTypes,assignCurriculum
 };

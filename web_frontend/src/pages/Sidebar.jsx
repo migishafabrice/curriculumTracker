@@ -28,21 +28,29 @@ const Sidebar = () => {
                         <ul className="nav nav-pills flex-column mb-2">
                             {[
                                 { to: "/Dashboard", icon: "fa-tachometer-alt", text: "Dashboard" },
-                                { to: "/Schools", icon: "fa-school", text: "Schools" },
-                                { to: "/Departments", icon: "fa-chalkboard-teacher", text: "Departments" },
-                                { to: "/Teachers", icon: "fa-users", text: "Teachers" },
-                                { to: "/Courses", icon: "fa-users", text: "Courses" },
-                                { to: "/Curricula", icon: "fa-book", text: "Curriculum" },
+                                (user?.role === "Administrator" || user?.role === "Staff") && {
+                                    to: "/Schools",
+                                    icon: "fa-school",
+                                    text: "Schools"
+                                  },
+                            (user?.role === "Administrator" || user?.role === "Staff") &&  
+                            { to: "/Departments", icon: "fa-chalkboard-teacher", text: "Departments" },
+                            (user?.role === "Administrator" || user?.role === "Staff" || user?.role === "School") &&   
+                            { to: "/Teachers", icon: "fa-users", text: "Teachers" },
+                            { to: "/Courses", icon: "fa-book-open", text: "Courses" },
+                                (user?.role === "Administrator" || user?.role === "Staff") &&
+                                 { to: "/Curricula", icon: "fa-book", text: "Curriculum" },
                                 { to: "/Diaries", icon: "fa-calendar-alt", text: "Class Diary" },
                                 { to: "/Reports", icon: "fa-chart-bar", text: "Reports" }
                             ].map((item, index) => (
+                                item && (
                                 <li key={index} className="nav-item">
                                     <Link to={item.to} className="sidebar-link nav-link d-flex align-items-center py-2">
                                         <i className={`fas ${item.icon} me-2`}></i>
                                         <span className="d-none d-sm-inline">{item.text}</span>
                                     </Link>
                                 </li>
-                            ))}
+                            )))}
                         </ul>
                     </div>
 

@@ -1,18 +1,17 @@
 import React, {useEffect, useState} from 'react';
 import Sidebar from './Sidebar';
-import { useNavigate } from 'react-router-dom';
+import { replace, useNavigate } from 'react-router-dom';
 import ToastMessage from '../ToastMessage';
 import axios from 'axios';  
+import { getCurrentUser } from './AuthUser';
 const Dashboard= ()=>
 {
 const [notification,setNotification]=useState({message:"",type:""});
 const Navigate = useNavigate();
-const token=localStorage.getItem("AuthToken");
-if(!token)
+const user=getCurrentUser();
+if(!user)
 {
-    setNotification({message:"Login to access the Dashboard",type:"error"});
-    Navigate("/login");
-    return;
+    Navigate("/login",replace);
 }
 return(
         <>

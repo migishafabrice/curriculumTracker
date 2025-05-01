@@ -10,13 +10,13 @@ const ManageDepartments=()=>
 {
     const [activeComponent, setActiveComponent] = useState(null);
     const[notification,setNotification]=useState({message:"",type:""});
-    const [showModal, setShowModal] = useState(false);
+   // const [showModal, setShowModal] = useState(false);
     const handleButtonClick = (component) => {
         setActiveComponent(component);
-        setShowModal(true); // Open the modal
+        //setShowModal(true); // Open the modal
     };
     const handleCloseModal = () => {
-        setShowModal(false); // Close the modal
+        //setShowModal(false); // Close the modal
         setActiveComponent(null); // Reset the active component
     };
 
@@ -51,31 +51,31 @@ const ManageDepartments=()=>
            {/* <!--Add side content--> */}
            <Sidebar/>
             {/* <!-- Content --> */}
-        <div class="page-content">
-        <div id="Department-page" class="page">
-        <div class="page-header">
-            <h1 class="h2">Manage Departments</h1>
+        <div className="page-content">
+        <div id="Department-page" className="page">
+        <div className="page-header">
+            <h1 className="h2">Manage Departments</h1>
             <div>
-<button class="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addEducationModal" onClick={() => handleButtonClick("EducationType")}>
-    <i class="fas fa-plus"></i> Add New Education Type
+<button className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal" onClick={() => handleButtonClick("EducationType")}>
+    <i className="fas fa-plus"></i> Add New Education Type
 </button>
-<button class="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addLevelModal" onClick={() => handleButtonClick("LevelType")}>
-    <i class="fas fa-plus"></i> Add New Level
+<button className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal" onClick={() => handleButtonClick("LevelType")}>
+    <i className="fas fa-plus"></i> Add New Level
 </button>
-<button class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#addSectionModal"  onClick={() => handleButtonClick("SectionType")}>
-    <i class="fas fa-plus"></i> Add New Option
+<button className="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#addModal"  onClick={() => handleButtonClick("SectionType")}>
+    <i className="fas fa-plus"></i> Add New Option
 </button>
 
             </div>
         </div>
 
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Department List</h5>
+        <div className="card mb-4">
+            <div className="card-header">
+                <h5 className="card-title mb-0">Department List</h5>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
+            <div className="card-body">
+                <div className="table-responsive">
+                    <table className="table table-hover">
                         <thead>
                             <tr>
                                 <th>Type</th>
@@ -94,9 +94,9 @@ const ManageDepartments=()=>
                                 <td>John Smith</td>
                                 <td>Mar 10, 2025</td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                    <button className="btn btn-sm btn-outline-primary"><i className="fas fa-edit"></i></button>
+                                    <button className="btn btn-sm btn-outline-info"><i className="fas fa-eye"></i></button>
+                                    <button className="btn btn-sm btn-outline-danger"><i className="fas fa-trash"></i></button>
                                 </td>
                             </tr>
                            
@@ -104,21 +104,36 @@ const ManageDepartments=()=>
                     </table>
                 </div>
                 <nav>
-                    <ul class="pagination justify-content-end">
-                        <li class="page-item disabled"><a class="page-link" href="#">Previous</a></li>
-                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                        <li class="page-item"><a class="page-link" href="#">2</a></li>
-                        <li class="page-item"><a class="page-link" href="#">Next</a></li>
+                    <ul className="pagination justify-content-end">
+                        <li className="page-item disabled"><a className="page-link" href="#">Previous</a></li>
+                        <li className="page-item active"><a className="page-link" href="#">1</a></li>
+                        <li className="page-item"><a className="page-link" href="#">2</a></li>
+                        <li className="page-item"><a className="page-link" href="#">Next</a></li>
                     </ul>
                 </nav>
             </div>
         </div>
     </div>
     </div>
-    {/* Add Department */}
+    <div className="modal fade" id="addModal" tabIndex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
+            <div className="modal-dialog modal-lg">
+                <div className="modal-content">
+                    <div className="modal-header bg-black text-white">
+                        <h5 className="modal-title" id="addEducationModalLabel">Add New
+    {activeComponent === "EducationType" && " Education Type"}
+    {activeComponent === "LevelType" && " Level Type"}
+    {activeComponent === "SectionType" && " Section & Option Type"} 
+                        </h5>
+                        <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+               {/* Add Department */}
     {activeComponent === "EducationType" && <EducationType showNotification={showNotification}/>}
     {activeComponent === "LevelType" && <LevelType showNotification={showNotification}/>}
     {activeComponent === "SectionType" && <SectionType showNotification={showNotification}/>}
+              </div>
+            </div>
+         </div>        
+   
         </>
     );
 };

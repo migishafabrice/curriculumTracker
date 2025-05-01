@@ -1,6 +1,7 @@
 import React, { useState} from 'react';
 import axios from 'axios';
-
+import { getCurrentUser } from './AuthUser';
+const user = getCurrentUser();
 const EducationType = ({ showNotification }) => {
     const [formData, setFormData] = useState({
         code: '',
@@ -28,7 +29,9 @@ const EducationType = ({ showNotification }) => {
 
         try {
             setIsLoading(true);
-            const response = await axios.post('http://localhost:5000/department/education-type', formData);
+            const response = await axios.post('http://localhost:5000/department/education-type', formData,
+                { headers: { Authorization: `Bearer ${user.token}` } }
+            );
 
             if (response.data.type === "success") {
                 showNotification(response.data.message, response.data.type);
@@ -50,13 +53,7 @@ const EducationType = ({ showNotification }) => {
     };
 
     return (
-        <div className="modal fade" id="addEducationModal" tabIndex="-1" aria-labelledby="addEducationModalLabel" aria-hidden="true">
-            <div className="modal-dialog modal-lg">
-                <div className="modal-content">
-                    <div className="modal-header bg-primary text-white">
-                        <h5 className="modal-title" id="addEducationModalLabel">Add New Education Type</h5>
-                        <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
+        <>
                     <div className="modal-body">
                         <form id="EducationForm" onSubmit={handleSubmit}>
                             <div className="row mb-3">
@@ -118,9 +115,7 @@ const EducationType = ({ showNotification }) => {
                             {isLoading ? 'Saving...' : 'Save Education Type'}
                         </button>
                     </div>
-                </div>
-            </div>
-        </div>
+                    </> 
     );
 };
 
