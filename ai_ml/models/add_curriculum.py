@@ -1,18 +1,15 @@
-import fitz  # PyMuPDF
-import re
-import json
-import os
-import unicodedata
-from PIL import Image
-import pytesseract
 from flask import Blueprint, jsonify, request
+import fitz
+import re
 import mysql.connector
 from mysql.connector import Error
+import json
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize Flask Blueprint
+# Blueprint setup
 curriculum_blueprint = Blueprint('curriculum', __name__)
 
 # Database configuration
@@ -24,216 +21,184 @@ db_config = {
     'port': int(os.getenv('DB_PORT', 3306))
 }
 
-class CurriculumProcessor:
-    """Handles PDF extraction, symbol normalization, and outcome parsing."""
-    
-    def __init__(self):
-        self.symbol_map = {
-            # Checkmarks
-            '\u2713': '✓', '\u2714': '✓', '\u2705': '✓', '\u2611': '✓',
-            # Bullets
-            '\u2022': '•', '\u25cf': '●', '\u25e6': '◦', '\u2043': '⁃',
-            '\uf0b7': '•', '\u25aa': '▪', '\u25a0': '■', '\u25c6': '◆',
-            # OCR corrections
-            'v': '✓', 'x': '✓', 'o': '●', '-': '•'
-        }
-    
-    def extract_text(self, file_path: str) -> str:
-        """Extract and normalize text from PDF with symbol handling."""
-        try:
-            doc = fitz.open(file_path)
-            full_text = ""
-            
-            for page in doc:
-                # Text layer extraction
-                text = page.get_text("text", flags=fitz.TEXT_PRESERVE_LIGATURES)
-                
-                # OCR fallback for sparse text
-                if len(text.strip()) < 50 and len(page.get_text("words")) < 10:
-                    pix = page.get_pixmap()
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    text += pytesseract.image_to_string(img)
-                
-                full_text += text + "\n"
-            
-            return self._normalize_symbols(full_text)
-        except Exception as e:
-            print(f"Extraction error: {e}")
-            return ""
-
-    def _normalize_symbols(self, text: str) -> str:
-        """Normalize symbols to standard forms."""
-        for orig, normalized in self.symbol_map.items():
-            text = text.replace(orig, normalized)
-        return text
-
-    def parse_outcomes(self, text: str) -> dict:
-        """Parse learning outcomes into structured format."""
-        outcomes = []
-        current_outcome = {}
-        current_main_point = None
-        
-        for line in text.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Match outcome headers
-            if re.match(r'^(Learning Outcome|LO)\s?\d+[\.\d]*[:.]?\s?', line, re.I):
-                if current_outcome:
-                    if current_main_point:
-                        current_outcome['content'].append(current_main_point)
-                    outcomes.append(current_outcome)
-                current_outcome = {'title': line, 'content': []}
-                current_main_point = None
-                continue
-            
-            # Main points (bullets)
-            if re.match(r'^[•●▪]', line):
-                if current_main_point and current_outcome:
-                    current_outcome['content'].append(current_main_point)
-                current_main_point = {'main_point': line[1:].strip(), 'subpoints': []}
-                continue
-            
-            # Sub-points (checkmarks)
-            if re.match(r'^[✓✔☑]', line) and current_main_point:
-                current_main_point['subpoints'].append(line[1:].strip())
-                continue
-            
-            # Continuation lines
-            if current_main_point:
-                if current_main_point['subpoints']:
-                    current_main_point['subpoints'][-1] += f" {line}"
-                else:
-                    current_main_point['main_point'] += f" {line}"
-        
-        # Final cleanup
-        if current_main_point and current_outcome:
-            current_outcome['content'].append(current_main_point)
-        if current_outcome:
-            outcomes.append(current_outcome)
-        
-        return {'outcomes': outcomes}
-
-# Database functions
-def create_db_connection():
+def create_database_connection():
     """Create and return a MySQL connection."""
     try:
         return mysql.connector.connect(**db_config)
     except Error as e:
-        print(f"DB connection error: {e}")
+        return None
+def extract_text_from_pdf(file_path):
+    """Extract text content from PDF file using PyMuPDF (fitz)."""
+    try:
+        text = ""
+        with fitz.open(file_path) as doc:
+            for page in doc:
+                text += page.get_text() + "\n"
+        return text.strip()  # Remove trailing newline
+    except Exception as e:
+        print(f"PDF processing error: {e}")
         return None
 
-def save_curriculum(data: dict, outcomes: dict) -> bool:
-    """Save curriculum data to database."""
-    connection = create_db_connection()
+def extract_learning_outcomes(text: str) -> str:
+    """Parse text to extract structured learning outcomes in JSON format.
+    Content lines start with '✓' until next Learning Outcome is found.
+    Duplicate content lines are automatically removed."""
+    
+    outcomes: List[Dict] = []
+    current_outcome: Dict = {}
+    seen_content: set = set()
+    capturing_content = False
+    
+    for line in text.split('\n'):
+        line = line.strip()
+        
+        # Detect Learning Outcome headers
+        if match := re.match(r'^Learning Outcome\s?(\d+\.\d+)\s?:\s?(.+)$', line, re.IGNORECASE):
+            if current_outcome:  # Save previous outcome if exists
+                outcomes.append(current_outcome)
+                seen_content = set()  # Reset for new outcome
+            
+            current_outcome = {
+                'code': match.group(1).strip(),
+                'title': match.group(2).strip(),
+                'content': []
+            }
+            capturing_content = True
+            continue
+            
+        # Skip lines that start with 'o' or '-' (as per original comment)
+        if line.startswith(('o', '-')):
+            capturing_content = False
+            continue
+            
+        # Capture content lines when inside an outcome
+        if capturing_content and line:
+            content = line.strip()
+            if content and content not in seen_content:
+                current_outcome['content'].append(content)
+                seen_content.add(content)
+    
+    if current_outcome:  # Add the last outcome
+        outcomes.append(current_outcome)
+    
+    return json.dumps(outcomes, indent=2, ensure_ascii=False)
+
+
+def save_curriculum(data, outcomes_json):
+    """Save curriculum data to MySQL database."""
+    print("Saving curriculum data to database...")
+    connection = create_database_connection()
     if not connection:
         return False
     
     try:
         with connection.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO curricula (
-                    code, name, duration, education_type_code, 
-                    level_type_code, section_type_code, class_type_code, 
-                    details, description, document_path, issued_on
+            INSERT INTO curricula(code, name, duration,
+                     education_type_code, level_type_code, section_type_code,
+                      class_type_code, details, description, document_path,
+                       issued_on
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                data['code'], data['name'], data['duration'],
-                data['education_type'], data['level_type'],
-                data['section_type'], data['class_type'],
-                json.dumps(outcomes), data['description'],
-                data['document_path'], data['issued_on']
+                """, (
+                data['code'],
+                data['name'],
+                data['duration'],
+                data['education_type'],
+                data['level_type'],
+                data['section_type'],
+                data['class_type'],
+                outcomes_json,
+                data['description'],
+                data['document_path'], 
+                data['issued_on']
             ))
         connection.commit()
         return True
     except Error as e:
-        print(f"DB save error: {e}")
+        print(f"Database save error: {e}")
         return False
     finally:
-        if connection and connection.is_connected():
+        if connection.is_connected():
             connection.close()
 
-# Flask routes
 @curriculum_blueprint.route('/add-curriculum', methods=['POST'])
 def add_curriculum():
-    processor = CurriculumProcessor()
-    
     try:
         data = request.get_json()
         
         # Validate required fields
         required_fields = [
-            'code', 'name', 'education_type', 'level_type', 
-            'section_type', 'class_type', 'description', 
-            'duration', 'document', 'document_path', 'issued_on'
+            'code', 'name', 'education_type', 'level_type', 'section_type',
+            'class_type', 'description', 'duration', 'document','document_path', 'issued_on'
         ]
-        if missing := [f for f in required_fields if f not in data]:
+        if missing := [field for field in required_fields if field not in data]:
             return jsonify({
                 'success': False,
                 'error': f'Missing fields: {", ".join(missing)}'
             }), 400
         
-        # Verify document exists
+        # Verify document file exists
         if not os.path.isfile(data['document']):
             return jsonify({
                 'success': False,
                 'error': 'Document file not found'
             }), 400
         
-        # Process PDF
-        text = processor.extract_text(data['document'])
-        if not text:
+        # Extract text from PDF
+        pdf_text = extract_text_from_pdf(data['document'])
+        if not pdf_text:
             return jsonify({
-                'success': False,
-                'error': 'Text extraction failed'
+                'type': 'error',
+                'message': 'Failed to extract text from PDF'
             }), 400
         
-        outcomes = processor.parse_outcomes(text)
+        # Process outcomes (returns JSON string)
+        outcomes_json = extract_learning_outcomes(pdf_text)
         
         # Save to database
-        if not save_curriculum(data, outcomes):
+        if not save_curriculum(data, outcomes_json):
             return jsonify({
-                'success': False,
-                'error': 'Database save failed'
+                'type': 'error',
+                'message': 'Failed to save curriculum to database'
             }), 500
         
         return jsonify({
-            'success': True,
-            'message': 'Curriculum processed successfully',
-            'outcomes': outcomes
+            'type': 'success',
+            'message': 'Curriculum added and extracted successfully',
+            
         })
-    
+
     except Exception as e:
         return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
+            'type': 'error',
+            'message': f'Server error: {str(e)}'
         }), 500
 
 @curriculum_blueprint.route('/curricula', methods=['GET'])
 def get_curricula():
     """Fetch all curricula from database."""
-    connection = create_db_connection()
+    connection = create_database_connection()
     if not connection:
         return jsonify({
-            'success': False,
-            'error': 'Database connection failed'
+            'type': 'error',
+            'message': 'Database connection failed',
+            
         }), 500
     
     try:
         with connection.cursor(dictionary=True) as cursor:
             cursor.execute("""
-                SELECT code, name, education_type_code, level_type_code,
-                       section_type_code, class_type_code, description,
-                       duration, document_path, details, issued_on
+                SELECT 
+                    code, name, education_type, level_type, 
+                    section_type, class_type, description, 
+                    duration, document_path, details, issued_on
                 FROM curricula
             """)
             results = cursor.fetchall()
             
             # Convert JSON strings back to objects
             for row in results:
-                if row['details']:
-                    row['details'] = json.loads(row['details'])
+                row['details'] = json.loads(row['details'])
             
             return jsonify({
                 'success': True,
@@ -246,5 +211,5 @@ def get_curricula():
             'error': f'Database error: {str(e)}'
         }), 500
     finally:
-        if connection and connection.is_connected():
+        if connection.is_connected():
             connection.close()
