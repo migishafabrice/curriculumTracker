@@ -1,21 +1,23 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import Select from "react-select";
 import axios from "axios";
 import ToastMessage from "../ToastMessage";
 import { fetchEducationTypes, fetchLevelTypes, fetchSectionTypes, fetchClassTypes } from "./AppFunctions";
 import { getCurrentUser } from "./AuthUser";
-
-const user = getCurrentUser();
-
+import { Navigate, replace } from "react-router-dom";
 const ManageCurricula = () => {
-  // Form state
+  const user = getCurrentUser();
+  if(!user) {
+   console.error("User not found");
+   Navigate("/login",replace);
+  }
   const [formData, setFormData] = useState({
     name: "",
     education_type: "",
     level: "",
     duration: 0,
-    option: "",
+    section: "",
     class: "",
     code: "",
     description: "",
@@ -29,12 +31,10 @@ const ManageCurricula = () => {
   const [showStructureModal, setShowStructureModal] = useState(false);
 
   // Dropdown options state
-  const [dropdownOptions, setDropdownOptions] = useState({
-    educationTypes: [],
-    levels: [],
-    sections: [],
-    classes: []
-  });
+  const [educationTypes, setEducationTypes] = useState([]);
+  const [levelTypes, setLevelTypes] = useState([]);
+  const [sectionTypes, setSectionTypes] = useState([]);
+  const [classTypes, setClassTypes] = useState([]);
 
   // Loading states
   const [isLoading, setIsLoading] = useState({
@@ -58,10 +58,7 @@ const ManageCurricula = () => {
       setIsLoading(prev => ({ ...prev, educationTypes: true }));
       try {
         const types = await fetchEducationTypes(user?.role === "School" ? user.userid : "");
-        setDropdownOptions(prev => ({
-          ...prev,
-          educationTypes: types.map(({ code, name }) => ({ value: code, label: name }))
-        }));
+        setEducationTypes(types.map(({ code, name }) => ({ value: code, label: name })));
       } catch (err) {
         setNotification({ message: 'Failed to fetch education types', type: 'error' });
         console.error("Failed to fetch education types:", err);
@@ -74,127 +71,100 @@ const ManageCurricula = () => {
   }, []);
 
   // Fetch levels when education type changes
-  const fetchLevels = useCallback(async (educationType) => {
-    if (!educationType) {
-      setDropdownOptions(prev => ({ ...prev, levels: [], sections: [], classes: [] }));
-      setFormData(prev => ({ ...prev, level: "", option: "", class: "" }));
-      return;
-    }
+  useEffect(() => {
+    const fetchLevels = async () => {
+      if (!formData.education_type) {
+        setLevelTypes([]);
+        setSectionTypes([]);
+        setClassTypes([]);
+        setFormData(prev => ({ ...prev, level: "", section: "", class: "" }));
+        return;
+      }
 
-    setIsLoading(prev => ({ ...prev, levels: true }));
-    try {
-      const levels = await fetchLevelTypes(educationType, user?.role === "School" ? user.userid : "");
-      setDropdownOptions(prev => ({
-        ...prev,
-        levels: levels.map(({ code, name }) => ({ value: code, label: name })),
-        sections: [],
-        classes: []
-      }));
-      setFormData(prev => ({ ...prev, level: "", option: "", class: "" }));
-    } catch (err) {
-      setNotification({ message: 'Failed to fetch level types', type: 'error' });
-      console.error("Failed to fetch level types:", err);
-    } finally {
-      setIsLoading(prev => ({ ...prev, levels: false }));
-    }
-  }, []);
+      setIsLoading(prev => ({ ...prev, levels: true }));
+      try {
+        const levels = await fetchLevelTypes(formData.education_type, user?.role === "School" ? user.userid : "");
+        setLevelTypes(levels.map(({ code, name }) => ({ value: code, label: name })));
+        setFormData(prev => ({ ...prev, level: "", section: "", class: "" }));
+      } catch (err) {
+        setNotification({ message: 'Failed to fetch level types', type: 'error' });
+        console.error("Failed to fetch level types:", err);
+      } finally {
+        setIsLoading(prev => ({ ...prev, levels: false }));
+      }
+    };
+
+    fetchLevels();
+  }, [formData.education_type]);
 
   // Fetch sections when level changes
-  const fetchSections = useCallback(async (level) => {
-    if (!level) {
-      setDropdownOptions(prev => ({ ...prev, sections: [], classes: [] }));
-      setFormData(prev => ({ ...prev, option: "", class: "" }));
-      return;
-    }
+  useEffect(() => {
+    const fetchSections = async () => {
+      if (!formData.level) {
+        setSectionTypes([]);
+        setClassTypes([]);
+        setFormData(prev => ({ ...prev, section: "", class: "" }));
+        return;
+      }
 
-    setIsLoading(prev => ({ ...prev, sections: true }));
-    try {
-      const sections = await fetchSectionTypes(level, user?.role === "School" ? user.userid : "");
-      setDropdownOptions(prev => ({
-        ...prev,
-        sections: sections.map(({ code, name }) => ({ value: code, label: name })),
-        classes: []
-      }));
-      setFormData(prev => ({ ...prev, option: "", class: "" }));
-    } catch (err) {
-      setNotification({ message: 'Failed to fetch section types', type: 'error' });
-      console.error("Failed to fetch section types:", err);
-    } finally {
-      setIsLoading(prev => ({ ...prev, sections: false }));
-    }
-  }, []);
+      setIsLoading(prev => ({ ...prev, sections: true }));
+      try {
+        const sections = await fetchSectionTypes(formData.level, user?.role === "School" ? user.userid : "");
+        setSectionTypes(sections.map(({ code, name }) => ({ value: code, label: name })));
+        setFormData(prev => ({ ...prev, section: "", class: "" }));
+      } catch (err) {
+        setNotification({ message: 'Failed to fetch section types', type: 'error' });
+        console.error("Failed to fetch section types:", err);
+      } finally {
+        setIsLoading(prev => ({ ...prev, sections: false }));
+      }
+    };
+
+    fetchSections();
+  }, [formData.level]);
 
   // Fetch classes when section changes
-  const fetchClasses = useCallback(async (level) => {
-    if (!level) {
-      setDropdownOptions(prev => ({ ...prev, classes: [] }));
-      setFormData(prev => ({ ...prev, class: "" }));
-      return;
-    }
-  
-    setIsLoading(prev => ({ ...prev, classes: true }));
-    try {
-      const cl = await fetchClassTypes(level);
-      let classArray = [];
-      if (Array.isArray(cl)) {
-        classArray = cl.flatMap(item => {
-          if (item.classes) {
-            return item.classes.split(',').map(c => c.trim()).filter(c => c);
-          }
-          
-          return [];
-        });
-        
-      } else if (typeof cl === 'string') {
-        
-        classArray = cl.split(',').map(c => c.trim()).filter(c => c);
-        
+  useEffect(() => {
+    const fetchClasses = async () => {
+      if (!formData.section) {
+        setClassTypes([]);
+        setFormData(prev => ({ ...prev, class: "" }));
+        return;
       }
-      
-      setNotification({ message: "classes"+classArray, type: "error" });
-      const uniqueClasses = [...new Set(classArray.map(c => String(c).trim()))].filter(c => c);
-      
-      setDropdownOptions(prev => ({
-        ...prev,
-        classes: uniqueClasses.map(item => ({
-          value: item,
-          label: item
-        }))
-      }));
-      
-      setFormData(prev => ({ ...prev, class: "" }));
-    } catch (err) {
-      setNotification({ message: 'Failed to fetch class types', type: 'error' });
-      console.error("Failed to fetch class types:", err);
-    } finally {
-      setIsLoading(prev => ({ ...prev, classes: false }));
-    }
-  }, []);
 
-  // Handle select changes with proper chaining
-  const handleSelectChange = useCallback((name, selectedOption) => {
-    const value = selectedOption ? selectedOption.value : "";
-    
-    setFormData(prev => {
-      const newData = { ...prev, [name]: value };
-      
-      if (name === "education_type") {
-        newData.level = "";
-        newData.option = "";
-        newData.class = "";
-        fetchLevels(value);
-      } else if (name === "level") {
-        newData.option = "";
-        newData.class = "";
-        fetchSections(value);
-      } else if (name === "option") {
-        newData.class = "";
-        fetchClasses(formData.level);
+      setIsLoading(prev => ({ ...prev, classes: true }));
+      try {
+        const cl = await fetchClassTypes(formData.level);
+        const allClasses = cl.flatMap(item => 
+          item.classes 
+            ? item.classes.split(',').map(c => c.trim())
+            : []
+        );
+        
+        const classArray = typeof allClasses === 'string' 
+          ? allClasses.split(',').map(c => c.trim()).filter(c => c)
+          : Array.isArray(allClasses)
+            ? allClasses.map(c => String(c).trim()).filter(c => c)
+            : [];
+            
+        setClassTypes(classArray.map(item => ({ value: item, label: item })));
+        setFormData(prev => ({ ...prev, class: "" }));
+      } catch (err) {
+        setNotification({ message: 'Failed to fetch class types', type: 'error' });
+        console.error("Failed to fetch class types:", err);
+      } finally {
+        setIsLoading(prev => ({ ...prev, classes: false }));
       }
-      
-      return newData;
-    });
-  }, [fetchLevels, fetchSections, fetchClasses]);
+    };
+
+    fetchClasses();
+  }, [formData.section, formData.level]);
+
+  // Handle select changes
+  const handleSelectChange = (name, selectedOption) => {
+    const value = selectedOption ? selectedOption.value : "";
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -264,7 +234,7 @@ const ManageCurricula = () => {
       formValues.append("name", formData.name);
       formValues.append("education_type", formData.education_type);
       formValues.append("level_type", formData.level);
-      formValues.append("section_type", formData.option);
+      formValues.append("section_type", formData.section);
       formValues.append("duration", formData.duration);
       formValues.append("code", formData.code);
       formValues.append("class_type", formData.class);
@@ -281,9 +251,10 @@ const ManageCurricula = () => {
         return;
       }
       formValues.append("document", formData.document);
-
-      const response = await axios.post("http://localhost:5000/Course/addCourse", formValues, {
-        headers: { "Content-Type": "multipart/form-data" }
+      const response = await axios.post("http://localhost:5000/curriculum/addCurriculum", formValues, {
+      headers: { "Content-Type": "multipart/form-data",
+        Authorization: `Bearer ${user.token}`
+      }
       });
 
       if (response.data.type === "success") {
@@ -296,7 +267,7 @@ const ManageCurricula = () => {
           education_type: "",
           level: "",
           duration: 0,
-          option: "",
+          section: "",
           class: "",
           code: "",
           description: "",
@@ -445,10 +416,10 @@ const ManageCurricula = () => {
                       </label>
                       <Select
                         isClearable
-                        options={dropdownOptions.educationTypes}
+                        options={educationTypes}
                         isLoading={isLoading.educationTypes}
                         onChange={(selected) => handleSelectChange("education_type", selected)}
-                        value={dropdownOptions.educationTypes.find(opt => opt.value === formData.education_type)}
+                        value={educationTypes.find(opt => opt.value === formData.education_type)}
                         placeholder="Select Education Type"
                         required
                         isDisabled={isLoading.submitting}
@@ -460,10 +431,10 @@ const ManageCurricula = () => {
                       </label>
                       <Select
                         isClearable
-                        options={dropdownOptions.levels}
+                        options={levelTypes}
                         isLoading={isLoading.levels}
                         onChange={(selected) => handleSelectChange("level", selected)}
-                        value={dropdownOptions.levels.find(opt => opt.value === formData.level)}
+                        value={levelTypes.find(opt => opt.value === formData.level)}
                         placeholder={formData.education_type ? "Select Level" : "Select Education Type first"}
                         isDisabled={!formData.education_type || isLoading.submitting}
                         required
@@ -475,14 +446,14 @@ const ManageCurricula = () => {
                   <div className="row mb-3">
                   <div className="col-md-4">
                       <label className="form-label">
-                        <i className="fas fa-th-large me-2"></i>Education Option
+                        <i className="fas fa-th-large me-2"></i>Education Options - Sections
                       </label>
                       <Select
                         isClearable
-                        options={dropdownOptions.sections}
+                        options={sectionTypes}
                         isLoading={isLoading.sections}
-                        onChange={(selected) => handleSelectChange("option", selected)}
-                        value={dropdownOptions.sections.find(opt => opt.value === formData.option)}
+                        onChange={(selected) => handleSelectChange("section", selected)}
+                        value={sectionTypes.find(opt => opt.value === formData.section)}
                         placeholder={formData.level ? "Select Option" : "Select Level first"}
                         isDisabled={!formData.level || isLoading.submitting}
                       />
@@ -493,12 +464,12 @@ const ManageCurricula = () => {
                       </label>
                       <Select
                         isClearable
-                        options={dropdownOptions.classes}
+                        options={classTypes}
                         isLoading={isLoading.classes}
                         onChange={(selected) => handleSelectChange("class", selected)}
-                        value={dropdownOptions.classes.find(opt => opt.value === formData.class)}
-                        placeholder={formData.option ? "Select Class" : "Select Option first"}
-                        isDisabled={!formData.option || isLoading.submitting}
+                        value={classTypes.find(opt => opt.value === formData.class)}
+                        placeholder={formData.section ? "Select Class" : "Select Option first"}
+                        isDisabled={!formData.section || isLoading.submitting}
                         required
                       />
                     </div>

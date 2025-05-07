@@ -422,7 +422,7 @@ const getClassTypes = async ({level_type_code}) => {
             });
         }
          const [classTypes] = await db.query(
-                "SELECT classes,code FROM level_types WHERE code = ?",
+                "SELECT classes FROM level_types WHERE code = ?",
                 [level_type_code]
             );
             

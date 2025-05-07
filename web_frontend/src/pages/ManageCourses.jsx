@@ -1,5 +1,5 @@
 import React, { useState, useEffect,  useReducer, useMemo } from 'react';
-import { replace, useNavigate } from 'react-router-dom';
+import { replace, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import useLoadSchools from './useLoadSchools';
 import Select from 'react-select';
@@ -66,10 +66,10 @@ const formReducer = (state, action) => {
 };
 
 const ManageCourses = () => {
-  const Navigate = useNavigate();
-  
-  if (!user) {
-    Navigate("/login", replace);
+  const user = getCurrentUser();
+  if(!user) {
+   console.error("User not found");
+   Navigate("/login",replace);
   }
 
   const [teachers, setTeachers] = useState([]);

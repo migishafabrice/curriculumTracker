@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';    
+import { replace, useNavigate } from 'react-router-dom';    
 import axios from 'axios';
 import ToastMessage from '../ToastMessage'; 
 const Login = () => {
@@ -48,7 +48,14 @@ const Login = () => {
             const decodedToken = JSON.parse(atob(response.data.token.split('.')[1]));
             const { firstname, lastname} = decodedToken;
             setNotification({ message: `Welcome, ${firstname} ${lastname}!`, type: "success" });
-            if(localStorage.getItem("AuthToken")) Navigate("/dashboard");
+            if(localStorage.getItem("AuthToken"))
+                {
+             Navigate("/dashboard");
+                } 
+            else
+            {
+                Navigate("/login",replace);
+            }
         
         }
         else if(response.data.type==="error")

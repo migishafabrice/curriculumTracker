@@ -1,8 +1,8 @@
 import React from 'react';
 import axios from 'axios';
-import { getCurrentUser } from './AuthUser';
-const user = getCurrentUser();    
+import { getCurrentUser } from './AuthUser';    
 export const fetchEducationTypes = async (school) => {
+  const user = getCurrentUser();
     try {
      
       const { data } = await axios.post(
@@ -22,6 +22,7 @@ export const fetchEducationTypes = async (school) => {
     } 
   };
 export const fetchLevelTypes = async (education_type_code,school) => {
+  const user = getCurrentUser();
     try {
         const { data } = await axios.post(`http://localhost:5000/department/level-types`,
             {
@@ -46,6 +47,7 @@ export const fetchLevelTypes = async (education_type_code,school) => {
           } 
 }
 export const fetchSectionTypes = async (level_type_code,school_code) => {
+  const user = getCurrentUser();
     try {
         const { data } = await axios.post(`http://localhost:5000/department/section-types`,
           {
@@ -69,6 +71,7 @@ export const fetchSectionTypes = async (level_type_code,school_code) => {
           } 
 }
 export const fetchClassTypes = async (level_type_code) => {
+  const user = getCurrentUser();
     try {
       
         const { data } = await axios.post(`http://localhost:5000/department/class-types`,
@@ -84,7 +87,7 @@ export const fetchClassTypes = async (level_type_code) => {
         if (data.type === "error") {
             throw new Error(data.message);
         }
-       
+     
         const formattedTypes = data.classTypes;
         return formattedTypes;
     } catch (error) {
@@ -95,6 +98,7 @@ export const fetchCourseTypes = async (education_type_code,
   level_type_code,
 section_type_code,
 class_type_code) => {
+  const user = getCurrentUser();
     try {
         const { data } = await axios.post(`http://localhost:5000/curriculum/curriculum-types`,
           {

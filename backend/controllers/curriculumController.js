@@ -66,18 +66,23 @@ const addCurriculum = async (req, res) => {
 
           await db.query(query, values);
           
-          res.status(201).json({ 
+          return res.json({ 
             message: 'Curriculum added successfully',
             type: 'success' 
           });
         } else {
           // Handle non-Manual case - pass to Flask API
-          const fileContent = fs.readFileSync(req.file.path);
-          
+          const finalUploadDir = path.join(__dirname, '../../data/uploads');
+          if (!fs.existsSync(finalUploadDir)) { 
+            fs.mkdirSync(finalUploadDir, { recursive: true });
+          }
+          const filepath = req.file.path;
+          const finalFilename = code + "_" + Date.now() + path.extname(req.file.originalname);
+          const finalPath = path.join(finalUploadDir, finalFilename);
           // Remove the temp file after reading
-          fs.unlinkSync(req.file.path);
-
           const jsonData = {
+            code,
+            issued_on,
             name,
             education_type,
             level_type,
@@ -85,7 +90,8 @@ const addCurriculum = async (req, res) => {
             class_type,
             description,
             duration,
-            document: fileContent.toString('base64')
+            document: filepath,
+            document_path: finalPath,
           };
 
           const response = await axios.post(
@@ -95,10 +101,19 @@ const addCurriculum = async (req, res) => {
               headers: {
                 'Content-Type': 'application/json',
               }
+
             }
           );
-
-          res.status(response.status).json(response.data);
+          // Move file from temp location to permanent location
+         
+          fs.renameSync(req.file.path, finalPath);
+          
+          return res.json(
+            {
+              type:response.data.type,
+              message: response.data.message,
+            }
+          );
         }
       } catch (error) {
         // Clean up temp file if something went wrong
@@ -107,7 +122,7 @@ const addCurriculum = async (req, res) => {
         }
         
         console.error('Error details:', error);
-        res.status(500).json({
+       return res.json({
           message: 'Curriculum processing failed',
           error: error.message,
           type:'error'
