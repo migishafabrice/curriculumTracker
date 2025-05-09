@@ -105,7 +105,7 @@ class_type_code) => {
             education_type_code:education_type_code,
             level_type_code:level_type_code,
             section_type_code:section_type_code,
-            class_type_code:class_type_code
+            class_type_code:class_type_code,
           },
             { 
                 headers: {
@@ -118,6 +118,53 @@ class_type_code) => {
         }
         const formattedTypes = data.curriculumTypes;
         return formattedTypes;
+    } catch (error) {
+        console.error("Error fetching course types:", error);
+          } 
+}
+export const fetchCurriculumPerTeacher = async (teacher)  => {
+    const user = getCurrentUser();
+      try {
+       
+          const { data } = await axios.post(`http://localhost:5000/curriculum/curriculum-per-teacher`,
+            {
+              teacher:teacher
+            },
+              { 
+                  headers: {
+                      Authorization: `Bearer ${user.token}`
+                  }
+              }
+          );
+          if (data.type === "error") {
+              throw new Error(data.message);
+          }
+          
+          const formattedTypes = data.courses;
+          return formattedTypes;
+      } catch (error) {
+          console.error("Error fetching course types:", error);
+            } 
+  }
+export const fetchCourseSelected=async (course_code)  => {
+  
+  const user = getCurrentUser();
+    try {
+        const { data } = await axios.post(`http://localhost:5000/curriculum/course-selected`,
+          {
+            course:course_code
+          },
+            { 
+                headers: {
+                    Authorization: `Bearer ${user.token}`
+                }
+            }
+        );
+        if (data.type === "error") {
+            throw new Error(data.message);
+        }
+        return data.courseSelected;
+        
     } catch (error) {
         console.error("Error fetching course types:", error);
           } 

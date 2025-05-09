@@ -40,10 +40,6 @@ def extract_text_from_pdf(file_path):
         return None
 
 def extract_learning_outcomes(text: str) -> str:
-    """Parse text to extract structured learning outcomes in JSON format.
-    Content lines start with '✓' until next Learning Outcome is found.
-    Duplicate content lines are automatically removed."""
-    
     outcomes: List[Dict] = []
     current_outcome: Dict = {}
     seen_content: set = set()
@@ -59,8 +55,7 @@ def extract_learning_outcomes(text: str) -> str:
                 seen_content = set()  # Reset for new outcome
             
             current_outcome = {
-                'code': match.group(1).strip(),
-                'title': match.group(2).strip(),
+                "Learning Outcome": match.group(1)+' - ' + match.group(2).strip(),
                 'content': []
             }
             capturing_content = True

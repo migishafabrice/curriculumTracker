@@ -57,7 +57,7 @@ const addCurriculum = async (req, res) => {
           const codeNew = code+"_" + Date.now();
             const issued_on = new Date(Date.parse(issued_on)).toISOString();
 
-          const query = `INSERT INTO curriculum (code, name, duration, education_type_code, 
+          const query = `INSERT INTO curricula (code, name, duration, education_type_code, 
                         level_type_code, section_type_code, class_type_code, details, description,
                         document_path, issued_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
@@ -136,7 +136,7 @@ const addCurriculum = async (req, res) => {
 };
 const getCurriculumTypes = async ({education_type_code, level_type_code, section_type_code, class_type_code}) => {
   try {
-    const query = `SELECT * FROM curriculum WHERE education_type_code = ? AND level_type_code = ? AND section_type_code = ? AND class_type_code = ?`;
+    const query = `SELECT * FROM curricula WHERE education_type_code = ? AND level_type_code = ? AND section_type_code = ? AND class_type_code = ?`;
     const values = [education_type_code, level_type_code, section_type_code, class_type_code];
     const [rows] = await db.query(query, values);
     
@@ -171,6 +171,69 @@ const assignCurriculum = async ({teacherCode,courses,school}) => {
     return ({ message: error.message, type: 'error' });
   }
 };
+const getCurriculumPerTeacher = async ({teacher}) => {
+  try {
+    if (!teacher) {
+      return { message: 'Teacher code is required', type: 'error' };
+    }
+    const query = `SELECT * FROM courses WHERE teacher_code = ?`;
+    const values = [teacher];
+    const [rows] = await db.query(query, values);
+
+    if (rows.length === 0) {
+      return { message: 'You are not assigned any course', type: 'error' };
+    }
+
+    const Codes = JSON.parse(rows[0].curriculum_code || '[]');
+    if (Codes.length === 0) {
+      return { message: 'No curriculum codes found for the teacher', type: 'error' };
+    }
+
+    const placeholders = Codes.map(() => '?').join(',');
+    const curriculumQuery = `SELECT name, code FROM curricula WHERE code IN (${placeholders})`;
+    const [curriculumRows] = await db.query(curriculumQuery, Codes);
+
+    const courses = curriculumRows.map(row => ({
+      name: row.name,
+      code: row.code,
+    }));
+
+    return { courses: courses, type: 'success' };
+    
+  } catch (error) {
+    console.error('Error fetching curriculum types:', error);
+    return { message: error.message, type: 'error' };
+  }
+}
+const getCurriculumSelected = async ({course}) => {
+  try {
+    if (!course) {
+      return { message: 'Course code is required', type: 'error' };
+    }
+    const query = `
+      SELECT cu.*, 
+         lt.name AS level_type_name, 
+         st.name AS section_type_name,
+         et.name AS education_type_name
+      FROM curricula cu
+      LEFT JOIN level_types lt ON cu.level_type_code = lt.code
+      LEFT JOIN section_types st ON cu.section_type_code = st.code
+      LEFT JOIN education_types et ON cu.education_type_code = et.code
+      WHERE cu.code = ?`;
+    const values = [course];
+    const [rows] = await db.query(query, values);
+
+    if (rows.length === 0) {
+      return { message: 'Course details not found', type: 'error' };
+    }
+
+    return { courseSelected: rows, type: 'success' };
+    
+  } catch (error) {
+    console.error('Error fetching curriculum types:', error);
+    return { message: error.message, type: 'error' };
+  }
+}
 module.exports = { 
-  addCurriculum , getCurriculumTypes,assignCurriculum
+  addCurriculum , getCurriculumTypes,assignCurriculum,getCurriculumPerTeacher, getCurriculumSelected
 };

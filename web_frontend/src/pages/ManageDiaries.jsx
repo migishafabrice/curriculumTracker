@@ -1,226 +1,638 @@
-import Sidebar from "./Sidebar"
+import React, { useEffect, useState } from "react";
+import Sidebar from "./Sidebar";
+import { getCurrentUser } from "./AuthUser";
+import { fetchCurriculumPerTeacher, fetchCourseSelected} from "./AppFunctions";
+import { useNavigate } from "react-router-dom";
+import Select from "react-select";
+import ToastMessage from "../ToastMessage";
+import axios from "axios";
 
-const ManageDiaries=()=>
-{
-    return(
+const ManageDiaries = () => {
+    const navigate = useNavigate();
+    const user = getCurrentUser();
+    const [isLoading, setIsLoading] = useState(false);
+    const [modal, setModal] = useState(false);
+    const [courses, setCourses] = useState([]);
+    const [diaryEntries, setDiaryEntries] = useState([]);
+    const [notification, setNotification] = useState({ message: "", type: "" });
+    
+    const initialFormData = {
+        course_code: "",
+        teacher_code: user?.userid || "",
+        date: new Date().toISOString().split('T')[0],
+        activities: "",
+        homework: "",
+        additional_notes: "",
+        status: "pending",
+        learning_outcomes: [] // Array to store multiple learning outcomes
+    };
+
+    const [formData, setFormData] = useState(initialFormData);
+    const [courseDetails, setCourseDetails] = useState({
+        name: "",
+        code: "",
+        level: "",
+        section: "",
+        education: "",
+        promotion: "",
+        details: "",
+    });
+    
+    const [learningOutcomes, setLearningOutcomes] = useState([]);
+    const [topicsOptions, setTopicsOptions] = useState([]);
+    const [currentLO, setCurrentLO] = useState("");
+    const [currentTopics, setCurrentTopics] = useState([]);
+
+    // Redirect if not authenticated
+    useEffect(() => {
+        if (!user) {
+            navigate("/login", { replace: true });
+        }
+    }, []);
+
+    // Fetch courses and diary entries
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const coursesData = await fetchCurriculumPerTeacher(user.userid);
+                setCourses(coursesData.map(course => ({
+                    value: course.code,
+                    label: `${course.name} (${course.code})`
+                })));
+                
+                // TODO: Uncomment when you implement fetchDiaryEntries
+                // const entries = await fetchDiaryEntries(user.userid);
+                // setDiaryEntries(entries);
+            } catch (error) {
+                setNotification({ message: "Error fetching data", type: "error" });
+                console.error("Fetch error:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (user) fetchData();
+    }, []);
+
+    // Parse learning outcomes when course details change
+    useEffect(() => {
+        if (courseDetails.details) {
+            try {
+                const parsedDetails = JSON.parse(courseDetails.details);
+                const outcomes = parsedDetails.map(item => ({
+                    value: item["Learning Outcome"],
+                    label: item["Learning Outcome"],
+                    content: item.content
+                }));
+                setLearningOutcomes(outcomes);
+            } catch (error) {
+                console.error("Error parsing course details:", error);
+                setLearningOutcomes([]);
+                setNotification({ message: "Error loading course curriculum", type: "error" });
+            }
+        } else {
+            setLearningOutcomes([]);
+        }
+    }, [courseDetails.details]);
+
+    const handleSelectCourse = async (selected) => {
+        const selectedValue = selected?.value || null;
+        
+        setFormData(prev => ({ 
+            ...prev, 
+            course_code: selectedValue,
+            learning_outcomes: [] // Clear existing LOs when course changes
+        }));
+        setLearningOutcomes([]);
+        setTopicsOptions([]);
+        setCurrentLO("");
+        setCurrentTopics([]);
+        
+        if (!selectedValue) {
+            setCourseDetails({
+                name: "",
+                code: "",
+                level: "",
+                section: "",
+                education: "",
+                promotion: "",
+                details: "",
+            });
+            return;
+        }
+        
+        try {
+            setIsLoading(true);
+            const response = await fetchCourseSelected(selectedValue);
+            const courseData = response[0]; 
+            setCourseDetails({
+                name: courseData.name,
+                code: courseData.code,
+                level: courseData.level_type_name,
+                section: courseData.section_type_name,
+                education: courseData.education_type_name,
+                promotion: courseData.class_type_code,
+                details: courseData.details,
+            });
+        } catch (error) {
+            setNotification({ message: "Error loading course details"+error.message, type: "error" });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLearningOutcomeChange = (selected) => {
+        setCurrentLO(selected?.value || "");
+        
+        if (selected) {
+            const topics = selected.content.map(topic => ({
+                value: topic,
+                label: topic
+            }));
+            setTopicsOptions(topics);
+        } else {
+            setTopicsOptions([]);
+        }
+        setCurrentTopics([]);
+    };
+
+    const handleTopicsCoveredChange = (selected) => {
+        setCurrentTopics(selected || []);
+    };
+
+    const addLearningOutcome = () => {
+        if (!currentLO || currentTopics.length === 0) {
+            setNotification({ 
+                message: "Please select a learning outcome and at least one topic", 
+                type: "error" 
+            });
+            return;
+        }
+
+        const newLO = {
+            "Learning Outcome": currentLO,
+            content: currentTopics.map(t => t.value)
+        };
+
+        setFormData(prev => ({
+            ...prev,
+            learning_outcomes: [...prev.learning_outcomes, newLO]
+        }));
+
+        // Reset current selections
+        setCurrentLO("");
+        setCurrentTopics([]);
+        setTopicsOptions([]);
+    };
+
+    const removeLearningOutcome = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            learning_outcomes: prev.learning_outcomes.filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (formData.learning_outcomes.length === 0) {
+            setNotification({ 
+                message: "Please add at least one learning outcome", 
+                type: "error" 
+            });
+            return;
+        }
+
+        setIsLoading(true);
+        
+        try {
+            // Prepare data for submission
+            const submissionData = {
+                ...formData,
+                learning_outcomes_json: JSON.stringify(formData.learning_outcomes)
+            };
+
+            const response = await axios.post(
+                "http://localhost:5000/diary/add-diary-entry",
+                submissionData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${user.token}`
+                    }
+                }
+            );
+            if (response.data.type==="error") {
+                throw new Error(response.data.message);
+            }
+            
+            setNotification({ 
+                message: "Diary entry saved successfully", 
+                type: "success" 
+            });
+            resetForm();
+            
+            // TODO: Uncomment when you implement fetchDiaryEntries
+            // const entries = await fetchDiaryEntries(user.userid);
+            // setDiaryEntries(entries);
+        } catch (error) {
+            setNotification({ 
+                message: error.message || "Error saving diary entry", 
+                type: "error" 
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const resetForm = () => {
+        setFormData(initialFormData);
+        setCourseDetails({
+            name: "",
+            code: "",
+            level: "",
+            section: "",
+            education: "",
+            promotion: "",
+            details: "",
+        });
+        setLearningOutcomes([]);
+        setTopicsOptions([]);
+        setCurrentLO("");
+        setCurrentTopics([]);
+        setModal(false);
+    };
+
+    if (!user) return null;
+
+    return (
         <>
-   
-           
-           {/* <!--Add side content--> */}
-           <Sidebar/>
-            {/* <!-- Content --> */}
-            <div class="page-content">
-        <div id="class-diary-page" class="page">
-        <div class="page-header">
-            <h1 class="h2">Class Diary Management</h1>
-            <div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDiaryModal">
-                    <i class="fas fa-plus"></i> Add New Diary Entry
-                </button>
-            </div>
-        </div>
-
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Class Diary List</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Subject</th>
-                                <th>Grade</th>
-                                <th>Teacher</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>D001</td>
-                                <td>Mathematics</td>
-                                <td>Grade 10</td>
-                                <td>John Smith</td>
-                                <td>Mar 14, 2025</td>
-                                <td><span class="badge bg-success status-badge">Completed</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>D002</td>
-                                <td>English</td>
-                                <td>Grade 8</td>
-                                <td>Emily Johnson</td>
-                                <td>Mar 14, 2025</td>
-                                <td><span class="badge bg-warning status-badge">Pending</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>D003</td>
-                                <td>Science</td>
-                                <td>Grade 11</td>
-                                <td>Michael Chen</td>
-                                <td>Mar 13, 2025</td>
-                                <td><span class="badge bg-success status-badge">Completed</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>D004</td>
-                                <td>History</td>
-                                <td>Grade 9</td>
-                                <td>Lisa Rodriguez</td>
-                                <td>Mar 13, 2025</td>
-                                <td><span class="badge bg-success status-badge">Completed</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>D005</td>
-                                <td>Physical Education</td>
-                                <td>Grade 10</td>
-                                <td>Robert Kim</td>
-                                <td>Mar 12, 2025</td>
-                                <td><span class="badge bg-success status-badge">Completed</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
-                                    <button class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <nav>
-                    <ul class="pagination justify-content-end">
-                        <li class="page-item disabled"><a class="page-link" href="#">Previous</a></li>
-                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                        <li class="page-item"><a class="page-link" href="#">2</a></li>
-                        <li class="page-item"><a class="page-link" href="#">Next</a></li>
-                    </ul>
-                </nav>
-            </div>
-        </div>
-    </div>
-    </div>
-    {/* Add diary */}
-
-    <div class="modal fade" id="addDiaryModal" tabindex="-1" aria-labelledby="addDiaryModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title" id="addDiaryModalLabel">Add New Class Diary Entry</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            {notification.message && (
+                <ToastMessage 
+                    message={notification.message} 
+                    type={notification.type} 
+                    onClose={() => setNotification({ message: "", type: "" })}
+                />
+            )}
+            
+            <Sidebar />
+            
+            <div className="page-content">
+                <div id="class-diary-page" className="page">
+                    <div className="page-header">
+                        <h1 className="h2">Class Diary Management</h1>
+                        <div>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={() => setModal(true)}
+                                
+                            >
+                                <i className="fas fa-plus me-1"></i>
+                                Add New Diary Entry
+                            </button>
+                        </div>
                     </div>
-                    <div class="modal-body">
-                        <form id="diaryForm">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" id="diarySubject">
-                                            <option selected disabled>Select a subject</option>
-                                            <option value="Mathematics">Mathematics</option>
-                                            <option value="English">English</option>
-                                            <option value="Science">Science</option>
-                                            <option value="History">History</option>
-                                            <option value="Physical Education">Physical Education</option>
-                                        </select>
-                                        <label for="diarySubject"><i class="fas fa-book me-2"></i>Subject</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" id="diaryGrade">
-                                            <option selected disabled>Select a grade</option>
-                                            <option value="Grade 6">Grade 6</option>
-                                            <option value="Grade 7">Grade 7</option>
-                                            <option value="Grade 8">Grade 8</option>
-                                            <option value="Grade 9">Grade 9</option>
-                                            <option value="Grade 10">Grade 10</option>
-                                            <option value="Grade 11">Grade 11</option>
-                                            <option value="Grade 12">Grade 12</option>
-                                        </select>
-                                        <label for="diaryGrade"><i class="fas fa-user-graduate me-2"></i>Grade</label>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" id="diaryTeacher">
-                                            <option selected disabled>Select teacher</option>
-                                            <option value="1">John Smith</option>
-                                            <option value="2">Emily Johnson</option>
-                                            <option value="3">Michael Chen</option>
-                                            <option value="4">Lisa Rodriguez</option>
-                                            <option value="5">Robert Kim</option>
-                                        </select>
-                                        <label for="diaryTeacher"><i class="fas fa-chalkboard-teacher me-2"></i>Teacher</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="date" class="form-control" id="diaryDate"/>
-                                        <label for="diaryDate"><i class="fas fa-calendar me-2"></i>Date</label>
-                                    </div>
-                                </div>
+                    <div className="card mb-4">
+                        <div className="card-header">
+                            <h5 className="card-title mb-0">Class Diary List</h5>
+                        </div>
+                        <div className="card-body">
+                            <div className="table-responsive">
+                                <table className="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Subject</th>
+                                            <th>Grade</th>
+                                            <th>Teacher</th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {diaryEntries.length > 0 ? (
+                                            diaryEntries.map(entry => (
+                                                <tr key={entry.id}>
+                                                    <td>{entry.id}</td>
+                                                    <td>{entry.subject}</td>
+                                                    <td>{entry.grade}</td>
+                                                    <td>{entry.teacher}</td>
+                                                    <td>{new Date(entry.date).toLocaleDateString()}</td>
+                                                    <td>
+                                                        <span className={`badge ${entry.status === 'completed' ? 'bg-success' : 'bg-warning'} status-badge`}>
+                                                            {entry.status}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <button className="btn btn-sm btn-outline-primary me-1">
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button className="btn btn-sm btn-outline-info me-1">
+                                                            <i className="fas fa-eye"></i>
+                                                        </button>
+                                                        <button className="btn btn-sm btn-outline-danger">
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan="7" className="text-center py-4">
+                                                    No diary entries found
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
-
-                            <div class="mb-3">
-                                <div class="form-floating">
-                                    <textarea class="form-control" id="diaryTopics" style={{height: "100px"}} placeholder="Topics Covered"></textarea>
-                                    <label for="diaryTopics"><i class="fas fa-list me-2"></i>Topics Covered</label>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="form-floating">
-                                    <textarea class="form-control" id="diaryActivities" style={{height: "100px"}} placeholder="Activities"></textarea>
-                                    <label for="diaryActivities"><i class="fas fa-tasks me-2"></i>Class Activities</label>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="form-floating">
-                                    <textarea class="form-control" id="diaryHomework" style={{height: "100px"}} placeholder="Homework"></textarea>
-                                    <label for="diaryHomework"><i class="fas fa-home me-2"></i>Homework Assigned</label>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="form-floating">
-                                    <textarea class="form-control" id="diaryNotes" style={{height: "100px"}} placeholder="Additional Notes"></textarea>
-                                    <label for="diaryNotes"><i class="fas fa-sticky-note me-2"></i>Additional Notes</label>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary">Save Diary Entry</button>
+                            {diaryEntries.length > 0 && (
+                                <nav>
+                                    <ul className="pagination justify-content-end">
+                                        <li className="page-item disabled">
+                                            <button className="page-link">Previous</button>
+                                        </li>
+                                        <li className="page-item active">
+                                            <button className="page-link">1</button>
+                                        </li>
+                                        <li className="page-item">
+                                            <button className="page-link">2</button>
+                                        </li>
+                                        <li className="page-item">
+                                            <button className="page-link">Next</button>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-       
+
+            {/* Add Diary Modal */}
+            {modal && (
+                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-lg">
+                        <div className="modal-content">
+                            <div className="modal-header bg-black text-white">
+                                <h5 className="modal-title">Add New Class Diary Entry</h5>
+                                <button 
+                                    type="button" 
+                                    className="btn-close btn-close-white" 
+                                    onClick={resetForm}
+                                   
+                                ></button>
+                            </div>
+                            <form onSubmit={handleSubmit}>
+                                <div className="modal-body">
+                                    <div className="row mb-3">
+                                        <div className="col-md-6">
+                                            <label htmlFor="diarySubject" className="form-label">
+                                                <i className="fas fa-book me-2"></i>Course
+                                            </label>
+                                            <Select
+                                                id="diarySubject"
+                                                name="course_code"
+                                                options={courses}
+                                                placeholder="Select a course"
+                                                isSearchable
+                                                isClearable
+                                                onChange={handleSelectCourse}
+                                                value={courses.find(c => c.value === formData.course_code)}
+                                                required
+                                                
+                                            />
+                                        </div>
+                                        <div className="col-md-6">
+                                            <label htmlFor="diaryDate" className="form-label">
+                                                <i className="fas fa-calendar me-2"></i>Date
+                                            </label>
+                                            <input 
+                                                type="date" 
+                                                className="form-control" 
+                                                id="diaryDate"
+                                                name="date"
+                                                value={formData.date}
+                                                onChange={handleInputChange}
+                                                required
+                                                
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="row mb-3">
+                                        <div className="col-md-4">
+                                            <label htmlFor="educationLevel" className="form-label">
+                                                <i className="fas fa-graduation-cap me-2"></i>Education Level
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                id="educationLevel"
+                                                value={courseDetails.level || ""}
+                                                disabled
+                                            />
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label htmlFor="sectionOption" className="form-label">
+                                                <i className="fas fa-layer-group me-2"></i>Section - Option
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                id="sectionOption"
+                                                value={courseDetails.section || ""}
+                                                disabled
+                                            />
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label htmlFor="classPromotion" className="form-label">
+                                                <i className="fas fa-users me-2"></i>Class - Promotion
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                id="classPromotion"
+                                                value={courseDetails.promotion || ""}
+                                                disabled
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Learning Outcomes Section */}
+                                    <div className="mb-4">
+                                        <h5 className="mb-3">
+                                            <i className="fas fa-list-check me-2"></i>
+                                            Learning Outcomes
+                                        </h5>
+                                        
+                                        <div className="card mb-3">
+                                            <div className="card-body">
+                                                <div className="row g-3">
+                                                    <div className="col-md-6">
+                                                        <label className="form-label">
+                                                            Learning Outcome
+                                                        </label>
+                                                        <Select
+                                                            options={learningOutcomes}
+                                                            placeholder={learningOutcomes.length ? "Select learning outcome" : "Select a course first"}
+                                                            isSearchable
+                                                            isClearable
+                                                            onChange={handleLearningOutcomeChange}
+                                                            value={learningOutcomes.find(lo => lo.value === currentLO)}
+                                                            isDisabled={ !learningOutcomes.length}
+                                                        />
+                                                    </div>
+                                                    <div className="col-md-6">
+                                                        <label className="form-label">
+                                                            Topics
+                                                        </label>
+                                                        <Select
+                                                            options={topicsOptions}
+                                                            placeholder={topicsOptions.length ? "Select topics" : "Select Learning Outocome first"}
+                                                            isSearchable
+                                                            isMulti
+                                                            onChange={handleTopicsCoveredChange}
+                                                            value={currentTopics}
+                                                            isDisabled={ !topicsOptions.length}
+                                                        />
+                                                    </div>
+                                                    <div className="col-12">
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-primary"
+                                                            onClick={addLearningOutcome}
+                                                            disabled={ !currentLO || currentTopics.length === 0}
+                                                        >
+                                                            <i className="fas fa-plus me-2"></i>
+                                                            Add Learning Outcome
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Added Learning Outcomes Table */}
+                                        {formData.learning_outcomes.length > 0 && (
+                                            <div className="table-responsive">
+                                                <table className="table table-bordered table-hover">
+                                                    <thead className="table-light">
+                                                        <tr>
+                                                            <th>Learning Outcome</th>
+                                                            <th>Topics Covered</th>
+                                                            <th>Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {formData.learning_outcomes.map((lo, index) => (
+                                                            <tr key={index}>
+                                                                <td>{lo["Learning Outcome"]}</td>
+                                                                <td>
+                                                                    <ul className="mb-0">
+                                                                        {lo.content.map((topic, i) => (
+                                                                            <li key={i}>{topic}</li>
+                                                                        ))}
+                                                                    </ul>
+                                                                </td>
+                                                                <td>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-sm btn-outline-danger"
+                                                                        onClick={() => removeLearningOutcome(index)}
+                                                                        
+                                                                    >
+                                                                        <i className="fas fa-trash"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label htmlFor="activities" className="form-label">
+                                            <i className="fas fa-tasks me-2"></i>Class Activities
+                                        </label>
+                                        <textarea 
+                                            className="form-control" 
+                                            id="activities"
+                                            name="activities"
+                                            rows="3"
+                                            value={formData.activities}
+                                            onChange={handleInputChange}
+                                            
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label htmlFor="homework" className="form-label">
+                                            <i className="fas fa-home me-2"></i>Homework Assigned
+                                        </label>
+                                        <textarea 
+                                            className="form-control" 
+                                            id="homework"
+                                            name="homework"
+                                            rows="3"
+                                            value={formData.homework}
+                                            onChange={handleInputChange}
+                                            
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label htmlFor="additional_notes" className="form-label">
+                                            <i className="fas fa-sticky-note me-2"></i>Additional Notes
+                                        </label>
+                                        <textarea 
+                                            className="form-control" 
+                                            id="additional_notes"
+                                            name="additional_notes"
+                                            rows="3"
+                                            value={formData.additional_notes}
+                                            onChange={handleInputChange}
+                                            
+                                        ></textarea>
+                                    </div>
+                                </div>
+                                <div className="modal-footer">
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary" 
+                                        onClick={resetForm}
+                                        
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        className="btn btn-primary"
+                                        disabled={formData.learning_outcomes.length === 0}
+                                    >
+                                        {isLoading ? (
+                                            <span className="spinner-border spinner-border-sm me-1"></span>
+                                        ) : (
+                                            <i className="fas fa-save me-1"></i>
+                                        )}
+                                        Save Diary Entry
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
+
 export default ManageDiaries;

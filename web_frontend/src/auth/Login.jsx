@@ -90,7 +90,7 @@ const Login = () => {
         <div className="login-container d-flex justify-content-center align-items-center" id="login-page">
             <div className="login-form col-md-4 col-lg-3 col-sm-6 col-11">
                 <div className="text-center mb-4">
-                    <img src="/api/placeholder/150/150" alt="EduManage Logo" className="login-logo"/>
+                    <img src="/assets/img/logo/logo-app.jpg" alt="EduManage Logo" className="login-logo"/>
                     <h2 className="text-primary">EduManage</h2>
                     <p className="text-muted">Educational Curriculum Management System</p>
                 </div>

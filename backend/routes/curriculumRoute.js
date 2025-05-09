@@ -1,6 +1,7 @@
 const express=require('express');
 const router=express.Router();
-const {addCurriculum,getCurriculumTypes,assignCurriculum}=require('../controllers/curriculumController');
+const {addCurriculum,getCurriculumTypes,assignCurriculum,
+    getCurriculumPerTeacher, getCurriculumSelected}=require('../controllers/curriculumController');
 const jwtMiddleware=require('../middleware/jwtMiddleware');
 router.post('/addCurriculum',jwtMiddleware,addCurriculum);
 router.post('/curriculum-types',jwtMiddleware,async (req, res) => {
@@ -29,6 +30,35 @@ router.post('/assignCurriculum',jwtMiddleware,async (req, res) => {
     }
 }
 );
-
+router.post('/curriculum-per-teacher',jwtMiddleware,async (req, res) => {
+    try {
+        const { teacher } = req.body;
+        
+        const result = await getCurriculumPerTeacher({teacher});
+        if (result.type === 'error') {
+            return res.json({ message: result.message, type:"error" });
+        }
+        
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+}
+);
+router.post('/course-selected',jwtMiddleware,async (req, res) => {
+    try {
+        const { course } = req.body;
+        
+        const result = await getCurriculumSelected({course});
+        if (result.type === 'error') {
+            return res.json({ message: result.message, type:"error" });
+        }
+        
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+}
+);
 // router.get('/getCurriculum',jwtMiddleware,getCurriculum);
 module.exports=router;
