@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useReducer, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
@@ -6,9 +7,9 @@ import axios from 'axios';
 import useLoadSchools from './useLoadSchools';
 import Address from './Address';
 import Select from 'react-select';
-import {fetchEducationTypes,fetchLevelTypes,fetchSectionTypes} from './AppFunctions';
+import { fetchEducationTypes, fetchLevelTypes, fetchSectionTypes } from './AppFunctions';
 import { getCurrentUser } from './AuthUser';
-const user = getCurrentUser(); 
+
 const API_BASE_URL = 'http://localhost:5000';
 const AVATAR_SIZE = '50px';
 
@@ -86,19 +87,70 @@ const useSchoolSections = () => {
 };
 
 const ManageSchools = () => {
+  const user = getCurrentUser();
   const [formData, dispatch] = useReducer(formReducer, initialFormState);
-  const [modal, setModal] = useState(false);
   const [notification, setNotification] = useState({ message: null, type: null });
   const [currentSection, setCurrentSection] = useState({ level: '', option: '' });
   const [educationTypes, setEducationTypes] = useState([]);
   const [levelTypes, setLevelTypes] = useState([]);
   const [sectionTypes, setSectionTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [modal, setModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const { schools, notice, loadSchools } = useLoadSchools();
   const { sections, addSection, removeSection, groupSections, setSections } = useSchoolSections();
 
   const groupedSections = useMemo(() => groupSections(sections), [groupSections, sections]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        const [eduTypes] = await Promise.all([
+          fetchEducationTypes(user?.role === "School" ? user.userid : "")
+        ]);
+        
+        setEducationTypes(eduTypes.map(({code, name}) => ({ value: code, label: name })));
+        loadSchools();
+        setIsLoading(false);
+      } catch (error) {
+        setNotification({ message: error.message, type: "error" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
+  }, []);
+
+  useEffect(() => {
+    if (notice?.message) {
+      setNotification(notice);
+    }
+  }, []);
+
+  const filteredSchools = useMemo(() => {
+    if (!Array.isArray(schools)) return [];
+    
+    return schools.filter(school => {
+      const searchLower = searchTerm.toLowerCase();
+      const name = school?.name?.toLowerCase() || '';
+      const phone = school?.telephone?.toLowerCase() || '';
+      const email = school?.email?.toLowerCase() || '';
+      const address = school?.address?.toLowerCase() || '';
+      const sections = (school?.section_types && typeof school.section_types === 'string' ? school.section_types.toLowerCase() : '');
+      
+      
+      return name.includes(searchLower) || 
+             phone.includes(searchLower) || 
+             email.includes(searchLower) ||
+             address.includes(searchLower) ||
+             sections.includes(searchLower);
+    });
+  }, [schools, searchTerm]);
 
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
@@ -121,13 +173,10 @@ const ManageSchools = () => {
           ...(name === 'level' ? { option: '' } : {}),
           ...(name === 'option' ? { option: value } : {})
         };
-
         return updatedSection;
       });
-        
-       
-      }
-      }, []);
+    }
+  }, []);
 
   const handleAddressChange = useCallback((field, value) => {
     dispatch({ type: 'UPDATE_ADDRESS', field, value });
@@ -137,7 +186,7 @@ const ManageSchools = () => {
     if (!educationType) return;
     try {
       setIsLoading(true);
-      const levels = await fetchLevelTypes(educationType,user?.role === "School" ? user.userid : "");
+      const levels = await fetchLevelTypes(educationType, user?.role === "School" ? user.userid : "");
       setLevelTypes(levels.map(({code, name}) => ({ value: code, label: name })));
     } catch (err) {
       setNotification({ message: 'Failed to fetch level types', type: 'error' });
@@ -145,13 +194,13 @@ const ManageSchools = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const fetchSectionTypesMemoized = useCallback(async (level) => {
     if (!level) return;
     try {
       setIsLoading(true);
-      const sections = await fetchSectionTypes(level,user?.role === "School" ? user.userid : "");
+      const sections = await fetchSectionTypes(level, user?.role === "School" ? user.userid : "");
       setSectionTypes(sections.map(({code, name}) => ({ value: code, label: name })));
     } catch (err) {
       setNotification({ message: 'Failed to fetch section types', type: 'error' });
@@ -159,35 +208,7 @@ const ManageSchools = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    if (notice?.message) {
-      setNotification(notice);
-    }
-  }, [notice]);
-useEffect(() => {
-  loadSchools();
-}, [loadSchools]);
-  useEffect(() => {
-    const loadEducationTypes = async () => {
-      try {
-        setIsLoading(true);
-        const types = await fetchEducationTypes(user?.role === "School" ? user.userid : "");
-        setEducationTypes(types.map(({code, name}) => ({
-          value: code,
-          label: name
-        })));
-      } catch (err) {
-        setNotification({ message: 'Failed to fetch education types', type: 'error' });
-        console.error("Failed to fetch education types:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadEducationTypes();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (formData.education_type) {
@@ -275,8 +296,9 @@ useEffect(() => {
 
       const response = await axios.post(`${API_BASE_URL}/school/addSchool`, data, {
         headers: { 
-            Authorization: `Bearer ${user.token}`
-         },
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${user.token}`
+        },
       });
 
       if (response.data.type === 'success') {
@@ -289,17 +311,37 @@ useEffect(() => {
         setNotification({ message: response.data.error, type: 'error' });
       }
     } catch (error) {
-      setNotification({ message: `Error: ${error.message}`, type: 'error' });
+      setNotification({ 
+        message: `Error: ${error.response?.data?.message || error.message}`, 
+        type: 'error' 
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [formData, sections, prepareSectionsForApi, loadSchools, setSections]);
+  }, [formData, sections, prepareSectionsForApi, loadSchools, setSections, user]);
 
   const resetForm = useCallback(() => {
     dispatch({ type: 'RESET' });
     setSections([]);
     setCurrentSection({ level: '', option: '' });
   }, [setSections]);
+
+  const handleDeleteSchool = async (schoolId) => {
+    if (window.confirm('Are you sure you want to delete this school?')) {
+      try {
+        const response = await axios.delete(
+          `${API_BASE_URL}/school/deleteSchool/${schoolId}`,
+          { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        if (response.data.type === 'success') {
+          setNotification({ message: response.data.message, type: 'success' });
+          loadSchools();
+        }
+      } catch (error) {
+        setNotification({ message: `Error deleting school: ${error.message}`, type: 'error' });
+      }
+    }
+  };
 
   const SchoolTableRow = useCallback(({ school }) => (
     <tr key={school.id}>
@@ -330,7 +372,10 @@ useEffect(() => {
         <button className="btn btn-sm btn-outline-primary me-2">
           <i className="fas fa-edit"></i>
         </button>
-        <button className="btn btn-sm btn-outline-danger">
+        <button 
+          className="btn btn-sm btn-outline-danger"
+          onClick={() => handleDeleteSchool(school.id)}
+        >
           <i className="fas fa-trash"></i>
         </button>
       </td>
@@ -349,6 +394,10 @@ useEffect(() => {
     </span>
   ), [removeSection]);
 
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <>
       {notification.message && (
@@ -362,273 +411,292 @@ useEffect(() => {
       <Sidebar />
       
       <div className="page-content">
-        <div id="Schools-page" className="page">
-          <div className="page-header d-flex justify-content-between align-items-center">
-            <h1 className="h2">Schools Management</h1>
+        <div id="schools-page" className="page">
+          <div className="page-header">
+            <h1 className="h2">Manage Schools</h1>
             <button 
-              className="btn btn-primary"
+              className="btn btn-primary" 
               onClick={() => setModal(true)}
-              aria-label="Add new school"
               disabled={isLoading}
             >
-              <i className="fas fa-plus me-2"></i> Add New School
+              <i className="fas fa-plus"></i> Add New School
             </button>
           </div>
-          
+                    
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="card-title mb-0">Schools List</h5>
+              <div className="d-flex justify-content-end align-items-center mt-4 mb-3 pe-3" style={{ width: "60%", marginLeft: "auto" }}>
+                <div className="input-group me-2">
+                  <span className="input-group-text"><i className="fas fa-search"></i></span>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="card-body">
+            
+            <div className="card-body p-1">
               {isLoading ? (
                 <div className="text-center">
                   <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading...</span>
                   </div>
                 </div>
-              ) : schools.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="table table-hover">
-                    <thead>
-                      <tr>
-                        <th>School</th>
-                        <th>Telephone</th>
-                        <th>Email</th>
-                        <th>Address</th>
-                        <th>Sections</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schools.map(school => (
-                        <SchoolTableRow key={school.id} school={school} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               ) : (
-                <p className="text-muted">No schools found.</p>
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>School</th>
+                          <th>Telephone</th>
+                          <th>Email</th>
+                          <th>Address</th>
+                          <th>Sections</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredSchools.length > 0 ? (
+                          filteredSchools.map(school => (
+                            <SchoolTableRow key={school.id} school={school} />
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="7" className="text-center">
+                              No schools found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {modal && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header bg-black text-white">
-                <h5 className="modal-title">Add New School</h5>
-                <button 
-                  type="button" 
-                  className="btn-close btn-close-white" 
-                  onClick={() => { setModal(false); resetForm(); }}
-                  aria-label="Close"
-                  disabled={isLoading}
-                />
-              </div>
-              <div className="modal-body">
-                <form id="SchoolForm" onSubmit={handleSubmit}>
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <div className="form-floating mb-3">
-                        <input
-                          type="text"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          className="form-control"
-                          id="SchoolName"
-                          placeholder="Name"
-                          required
-                          disabled={isLoading}
-                        />
-                        <label htmlFor="SchoolName">
-                          <i className="fas fa-user me-2"></i>Name
-                        </label>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="form-floating mb-3">
-                        <input
-                          type="text"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          className="form-control"
-                          id="SchoolPhone"
-                          placeholder="Telephone"
-                          required
-                          disabled={isLoading}
-                        />
-                        <label htmlFor="SchoolPhone">
-                          <i className="fas fa-phone me-2"></i>Phone
-                        </label>
-                      </div>
+      {/* Add School Modal */}
+      <div className={`modal fade ${modal ? 'show d-block' : ''}`} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header bg-black text-white">
+              <h5 className="modal-title">Add New School</h5>
+              <button 
+                type="button" 
+                className="btn-close btn-close-white" 
+                onClick={() => { setModal(false); resetForm(); }}
+                aria-label="Close"
+                disabled={isLoading}
+              />
+            </div>
+            <div className="modal-body">
+              <form id="SchoolForm" onSubmit={handleSubmit}>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <div className="form-floating mb-3">
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="SchoolName"
+                        placeholder="Name"
+                        required
+                        disabled={isLoading}
+                      />
+                      <label htmlFor="SchoolName">
+                        <i className="fas fa-user me-2"></i>Name
+                      </label>
                     </div>
                   </div>
+                  <div className="col-md-6">
+                    <div className="form-floating mb-3">
+                      <input
+                        type="text"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="SchoolPhone"
+                        placeholder="Telephone"
+                        required
+                        disabled={isLoading}
+                      />
+                      <label htmlFor="SchoolPhone">
+                        <i className="fas fa-phone me-2"></i>Phone
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <div className="form-floating mb-3">
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="SchoolEmail"
+                        placeholder="Email"
+                        required
+                        disabled={isLoading}
+                      />
+                      <label htmlFor="SchoolEmail">
+                        <i className="fas fa-envelope me-2"></i>Email
+                      </label>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <label htmlFor="CourseCategory" className="form-label">
+                      <i className="fas fa-tags me-2"></i>Education Type
+                    </label>
+                    <Select
+                      id="CourseCategory"
+                      isClearable
+                      options={educationTypes}
+                      onChange={(selected) => handleSelectChange("education_type", selected)}
+                      value={educationTypes.find(opt => opt.value === formData.education_type)}
+                      placeholder="Select Education Type"
+                      required
+                      isDisabled={isLoading}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-4 border-top pt-3">
+                  <h5 className="mb-3">School Sections</h5>
                   
                   <div className="row mb-3">
                     <div className="col-md-6">
-                      <div className="form-floating mb-3">
-                        <input
-                          type="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          className="form-control"
-                          id="SchoolEmail"
-                          placeholder="Email"
-                          required
-                          disabled={isLoading}
-                        />
-                        <label htmlFor="SchoolEmail">
-                          <i className="fas fa-envelope me-2"></i>Email
-                        </label>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <label htmlFor="CourseCategory" className="form-label">
-                        <i className="fas fa-tags me-2"></i>Education Type
+                      <label htmlFor="CourseGrade" className="form-label">
+                        <i className="fas fa-level-up-alt me-2"></i>Education Level
                       </label>
                       <Select
-                        id="CourseCategory"
+                        id="CourseGrade"
                         isClearable
-                        options={educationTypes}
-                        onChange={(selected) => handleSelectChange("education_type", selected)}
-                        value={educationTypes.find(opt => opt.value === formData.education_type)}
-                        placeholder="Select Education Type"
-                        required
-                        isDisabled={isLoading}
+                        options={levelTypes}
+                        onChange={(selected) => handleSelectChange("level", selected)}
+                        value={levelTypes.find(opt => opt.value === currentSection.level)}
+                        placeholder="Select Level"
+                        isDisabled={isLoading || !formData.education_type}
+                      />
+                    </div>
+                   
+                    <div className="col-md-6">
+                      <label htmlFor="CourseSection" className="form-label">
+                        <i className="fas fa-th-large me-2"></i>Education Option
+                      </label>
+                      <Select
+                        id="CourseSection"
+                        isClearable
+                        options={sectionTypes}
+                        onChange={(selected) => handleSelectChange("option", selected)}
+                        value={sectionTypes.find(opt => opt.value === currentSection.option)}
+                        placeholder="Select Option"
+                        isDisabled={isLoading || !currentSection.level}
                       />
                     </div>
                   </div>
 
-                  <div className="mb-4 border-top pt-3">
-                    <h5 className="mb-3">School Sections</h5>
-                    
-                    <div className="row mb-3">
-                      <div className="col-md-6">
-                        <label htmlFor="CourseGrade" className="form-label">
-                          <i className="fas fa-level-up-alt me-2"></i>Education Level
-                        </label>
-                        <Select
-                          id="CourseGrade"
-                          isClearable
-                          options={levelTypes}
-                          onChange={(selected) => handleSelectChange("level", selected)}
-                          value={levelTypes.find(opt => opt.value === currentSection.level)}
-                          placeholder="Select Level"
-                          isDisabled={isLoading || !formData.education_type}
-                        />
-                      </div>
-                     
-                      <div className="col-md-6">
-                        <label htmlFor="CourseSection" className="form-label">
-                          <i className="fas fa-th-large me-2"></i>Education Option
-                        </label>
-                        <Select
-                          id="CourseSection"
-                          isClearable
-                          options={sectionTypes}
-                          onChange={(selected) => handleSelectChange("option", selected)}
-                          value={sectionTypes.find(opt => opt.value === currentSection.option)}
-                          placeholder="Select Option"
-                          isDisabled={isLoading || !currentSection.level}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mb-3">
-                      <button 
-                        type="button" 
-                        className="btn btn-primary"
-                        onClick={handleAddSection}
-                        disabled={!currentSection.level || !formData.education_type || isLoading}
-                      >
-                        {isLoading ? (
-                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        ) : (
-                          <i className="fas fa-plus me-2"></i>
-                        )}
-                        Add to School Sections
-                      </button>
-                    </div>
-
-                    {sections.length > 0 && (
-                      <div className="mt-4">
-                        <h6>Selected School Sections</h6>
-                        <div className="d-flex flex-wrap">
-                          {Object.entries(groupedSections).map(([eduType, eduTypeData]) => (
-                            <div key={eduType} className="w-100 mb-3">
-                              <h6 className="bg-light p-2 rounded">{eduTypeData.label}</h6>
-                              {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
-                                <div key={level} className="ms-3 mb-3">
-                                  <h6 className="text-muted">{levelData.label}</h6>
-                                  <div className="d-flex flex-wrap ms-3">
-                                    {levelData.sections.map(section => (
-                                      <SectionBadge key={section.id} section={section} />
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <Address
-                    address={formData.address}
-                    onChange={handleAddressChange}
-                    disabled={isLoading}
-                  />
-
                   <div className="mb-3">
-                    <label htmlFor="SchoolPhoto" className="form-label">
-                      <i className="fas fa-image me-2"></i>Upload Logo
-                    </label>
-                    <input
-                      className="form-control"
-                      type="file"
-                      id="SchoolPhoto"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      disabled={isLoading}
-                    />
-                  </div>
-
-                  <div className="modal-footer">
                     <button 
                       type="button" 
-                      className="btn btn-secondary" 
-                      onClick={() => { setModal(false); resetForm(); }}
-                      disabled={isLoading}
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit" 
                       className="btn btn-primary"
-                      disabled={isLoading}
+                      onClick={handleAddSection}
+                      disabled={!currentSection.level || !formData.education_type || isLoading}
                     >
                       {isLoading ? (
                         <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      ) : null}
-                      Save School
+                      ) : (
+                        <i className="fas fa-plus me-2"></i>
+                      )}
+                      Add to School Sections
                     </button>
                   </div>
-                </form>
-              </div>
+
+                  {sections.length > 0 && (
+                    <div className="mt-4">
+                      <h6>Selected School Sections</h6>
+                      <div className="d-flex flex-wrap">
+                        {Object.entries(groupedSections).map(([eduType, eduTypeData]) => (
+                          <div key={eduType} className="w-100 mb-3">
+                            <h6 className="bg-light p-2 rounded">{eduTypeData.label}</h6>
+                            {Object.entries(eduTypeData.levels).map(([level, levelData]) => (
+                              <div key={level} className="ms-3 mb-3">
+                                <h6 className="text-muted">{levelData.label}</h6>
+                                <div className="d-flex flex-wrap ms-3">
+                                  {levelData.sections.map(section => (
+                                    <SectionBadge key={section.id} section={section} />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <Address
+                  address={formData.address}
+                  onChange={handleAddressChange}
+                  disabled={isLoading}
+                />
+
+                <div className="mb-3">
+                  <label htmlFor="SchoolPhoto" className="form-label">
+                    <i className="fas fa-image me-2"></i>Upload Logo
+                  </label>
+                  <input
+                    className="form-control"
+                    type="file"
+                    id="SchoolPhoto"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div className="modal-footer">
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => { setModal(false); resetForm(); }}
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    ) : null}
+                    Save School
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 };
 
-export default React.memo(ManageSchools);
+export default ManageSchools;

@@ -67,9 +67,9 @@ const addTeacher = async (req, res) => {
     }
     // Insert into DB
     const [query] = await db.query(
-      `INSERT INTO teachers (code, firstname,lastname, school, telephone, email, role, password, active, photo) 
+      `INSERT INTO teachers (code, firstname,lastname, school_code, telephone, email, role,curricula_code, password, active, photo) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [code, firstname, lastname, school, phone, email, role, hashedPassword, true, photoPath]
+      [code, firstname, lastname, school, phone, email, role,[], hashedPassword, true, photoPath]
     );
 
     // Check if insertion is successful
@@ -84,7 +84,7 @@ const addTeacher = async (req, res) => {
     res.status(201).json({
       message: "Teacher added successfully.",
       type: "success",
-      data: { code, names: `${firstname} ${lastname}`, school, email, phone, photo: photoPath },
+      data: { code, names: `${firstname} ${lastname}`, school_code, email, phone, photo: photoPath },
     });
   } catch (error) {
     console.error(error);
@@ -107,10 +107,10 @@ const getTeachers = (req, res) => {
   let query = "SELECT * FROM teachers";
   const queryParams = [];
   if (school) {
-    query += " WHERE school = ?";
+    query += " WHERE school_code = ?";
     queryParams.push(school);
   }
-  query += " ORDER BY school,firstname,lastname ASC";
+  query += " ORDER BY school_code,firstname,lastname ASC";
   db.query(query, queryParams)
     .then(([results]) => {
       if (results.length === 0) {

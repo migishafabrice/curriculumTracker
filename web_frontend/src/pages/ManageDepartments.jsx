@@ -1,121 +1,285 @@
-import React,{useState,useEffect} from "react";
-import Sidebar from "./Sidebar";
-import EducationType from "./EducationType";
-import LevelType from "./LevelType";
-import SectionType from "./SectionType";
+import React, { useState, useEffect, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import EducationType from './EducationType';
+import LevelType from './LevelType';
+import SectionType from './SectionType';
 import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
-import { Modal } from "bootstrap";
-const ManageDepartments=()=>
-{
-    const [activeComponent, setActiveComponent] = useState(null);
-    const[notification,setNotification]=useState({message:"",type:""});
-   // const [showModal, setShowModal] = useState(false);
-    const handleButtonClick = (component) => {
-        setActiveComponent(component);
-        //setShowModal(true); // Open the modal
-    };
-    const handleCloseModal = () => {
-        //setShowModal(false); // Close the modal
-        setActiveComponent(null); // Reset the active component
-    };
+import { Modal } from 'bootstrap';
+import { getCurrentUser } from './AuthUser';
+import { fetchDepartments } from './AppFunctions';
+import axios from 'axios';
 
-    // Use useEffect to sync Bootstrap modal with React state
-    useEffect(() => {
-        if (activeComponent) {
-            // Dynamically generate the modal ID
-            const modalId = `add${activeComponent}Modal`;
+const ManageDepartments = () => {
+  const user = getCurrentUser();
+  const [activeComponent, setActiveComponent] = useState(null);
+  const [notification, setNotification] = useState({ message: null, type: null });
+  const [departments, setDepartments] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-            // Show the modal
-            const modalElement = document.getElementById(modalId);
-            if (modalElement) {
-                const modal = new Modal(modalElement);
-                modal.show();
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const departments = await fetchDepartments(user?.userid, user?.role);
+      if (departments) {
+        setDepartments(departments);
+      } else {
+        setNotification({ message: 'No departments found', type: 'error' });
+      }
+    } catch (error) {
+      setNotification({ message: `Error fetching departments: ${error.message}`, type: 'error' });
+      console.error("Error fetching departments:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-                // Add event listener to handle modal close
-                modalElement.addEventListener("hidden.bs.modal", handleCloseModal);
-            }
+  useEffect(() => {
+    if (!user) return;
+    fetchData();
+  }, []);
+
+  const handleButtonClick = (component) => {
+    setActiveComponent(component);
+  };
+
+  const handleCloseModal = () => {
+    setActiveComponent(null);
+  };
+
+  useEffect(() => {
+    if (activeComponent) {
+      const modalId = `add${activeComponent}Modal`;
+      const modalElement = document.getElementById(modalId);
+      if (modalElement) {
+        const modal = new Modal(modalElement);
+        modal.show();
+        modalElement.addEventListener("hidden.bs.modal", handleCloseModal);
+      }
+    }
+  }, []);
+
+  const showNotification = (message, type, shouldRefresh = false) => {
+    setNotification({ message, type });
+    if (shouldRefresh) {
+      fetchData();
+    }
+    setTimeout(() => {
+      setNotification({ message: null, type: null });
+    }, 5000);
+  };
+
+  const tableData = useMemo(() => {
+    return departments.flatMap(eduType => 
+      eduType.levels.flatMap(level => 
+        level.sections.flatMap(section => ({
+          id: `${eduType.code}-${level.code}-${section.code}`,
+          educationType: eduType.name,
+          educationTypeCode: eduType.code,
+          educationLevel: level.name,
+          educationLevelCode: level.code,
+          section: section.name,
+          sectionCode: section.code,
+          classes: level.classes.join(', ')
+        }))
+      )
+    );
+  }, [departments]);
+
+  const filteredData = useMemo(() => {
+    if (!searchTerm) return tableData;
+    const searchLower = searchTerm.toLowerCase();
+    return tableData.filter(item => 
+      item.educationType.toLowerCase().includes(searchLower) ||
+      item.educationLevel.toLowerCase().includes(searchLower) ||
+      item.section.toLowerCase().includes(searchLower) ||
+      item.classes.toLowerCase().includes(searchLower))
+  }, [tableData, searchTerm]);
+
+  const handleDeleteDepartment = async (type, code) => {
+    if (window.confirm('Are you sure you want to delete this department?')) {
+      try {
+        setIsLoading(true);
+        let endpoint = '';
+        if (type === 'education') endpoint = 'deleteEducationType';
+        if (type === 'level') endpoint = 'deleteLevelType';
+        if (type === 'section') endpoint = 'deleteSectionType';
+
+        const response = await axios.delete(
+          `http://localhost:5000/department/${endpoint}/${code}`,
+          { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+
+        if (response.data.type === 'success') {
+          showNotification(response.data.message, 'success', true);
+          
+        } else {
+          showNotification(response.data.error, 'error');
+          
         }
-    }, [activeComponent]);
-    const showNotification = (message, type) => {
-        setNotification({ message, type });
+        setIsLoading(false);
+      } catch (error) {
+        showNotification(`Error deleting department: ${error.message}`, 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
-        // Automatically hide the notification after 5 seconds
-        setTimeout(() => {
-            setNotification({ message: "", type: "" });
-        }, 5000);
-    };
-    return(
-        <>
-        {notification.message && <ToastMessage message={notification.message} type={notification.type} />}          
-           {/* <!--Add side content--> */}
-           <Sidebar/>
-            {/* <!-- Content --> */}
-        <div className="page-content">
-        <div id="Department-page" className="page">
-        <div className="page-header">
-            <h1 className="h2">Manage Departments</h1>
-            <div>
-<button className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal" onClick={() => handleButtonClick("EducationType")}>
-    <i className="fas fa-plus"></i> Add New Education Type
-</button>
-<button className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal" onClick={() => handleButtonClick("LevelType")}>
-    <i className="fas fa-plus"></i> Add New Level
-</button>
-<button className="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#addModal"  onClick={() => handleButtonClick("SectionType")}>
-    <i className="fas fa-plus"></i> Add New Option
-</button>
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-            </div>
-        </div>
+  const getPageTitle = () => {
+    switch (user.role) {
+      case "Administrator":
+      case "Staff":
+        return "Manage Departments";
+      case "School":
+        return "School Departments";
+      case "Teacher":
+        return "My Departments";
+      default:
+        return "Departments";
+    }
+  };
 
-        <div className="card mb-4">
+  return (
+    <>
+      {notification.message && (
+        <ToastMessage 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification({ message: null, type: null })}
+        />
+      )}
+      
+      <Sidebar />
+      
+      <div className="page-content">
+        <div id="departments-page" className="page">
+          <div className="page-header">
+            <h1 className="h2">{getPageTitle()}</h1>
+            {(user.role === "Administrator" || user.role === "Staff") && (
+              <div className="d-flex">
+                <button 
+                  className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal"
+                  onClick={() => handleButtonClick("EducationType")}
+                  disabled={isLoading}
+                >
+                  <i className="fas fa-plus me-2"></i>Add Education Type
+                </button>
+                <button 
+                  className="btn btn-primary me-3 mb-2" data-bs-toggle="modal" data-bs-target="#addModal"
+                  onClick={() => handleButtonClick("LevelType")}
+                  disabled={isLoading}
+                >
+                  <i className="fas fa-plus me-2"></i>Add Level
+                </button>
+                <button 
+                  className="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#addModal"
+                  onClick={() => handleButtonClick("SectionType")}
+                  disabled={isLoading}
+                >
+                  <i className="fas fa-plus me-2"></i>Add Option
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="card mb-4">
             <div className="card-header">
-                <h5 className="card-title mb-0">Department List</h5>
-            </div>
-            <div className="card-body">
-                <div className="table-responsive">
-                    <table className="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Category</th>
-                                <th>Trades</th>
-                                <th>Levels</th>
-                                <th>Subjects</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>C001</td>
-                                <td>Mathematics</td>
-                                <td>Grade 10</td>
-                                <td>John Smith</td>
-                                <td>Mar 10, 2025</td>
-                                <td>
-                                    <button className="btn btn-sm btn-outline-primary"><i className="fas fa-edit"></i></button>
-                                    <button className="btn btn-sm btn-outline-info"><i className="fas fa-eye"></i></button>
-                                    <button className="btn btn-sm btn-outline-danger"><i className="fas fa-trash"></i></button>
-                                </td>
-                            </tr>
-                           
-                        </tbody>
-                    </table>
+              <h5 className="card-title mb-0">Department List</h5>
+              <div className="d-flex justify-content-end align-items-center mt-4 mb-3 pe-3" style={{ width: "60%", marginLeft: "auto" }}>
+                <div className="input-group me-2">
+                  <span className="input-group-text"><i className="fas fa-search"></i></span>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
-                <nav>
-                    <ul className="pagination justify-content-end">
-                        <li className="page-item disabled"><a className="page-link" href="#">Previous</a></li>
-                        <li className="page-item active"><a className="page-link" href="#">1</a></li>
-                        <li className="page-item"><a className="page-link" href="#">2</a></li>
-                        <li className="page-item"><a className="page-link" href="#">Next</a></li>
-                    </ul>
-                </nav>
+              </div>
             </div>
+            
+            <div className="card-body p-1">
+              {isLoading ? (
+                <div className="text-center">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Level</th>
+                          <th>Sections (Options)</th>
+                          <th>Class (Promotion)</th>
+                          {(user.role === "Administrator" || user.role === "Staff") && <th>Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredData.length > 0 ? (
+                          filteredData.map((row, index) => (
+                            <tr key={row.id}>
+                              <td>
+                                {index === 0 || row.educationType !== filteredData[index - 1].educationType 
+                                  ? row.educationType 
+                                  : ''}
+                              </td>
+                              <td>
+                                {index === 0 || 
+                                 row.educationLevel !== filteredData[index - 1].educationLevel || 
+                                 row.educationType !== filteredData[index - 1].educationType
+                                  ? row.educationLevel 
+                                  : ''}
+                              </td>
+                              <td>{row.section}</td>
+                              <td>{row.classes}</td>
+                              {(user.role === "Administrator" || user.role === "Staff") && (
+                                <td>
+                                  <div className="action-buttons">
+                                    <button className="btn btn-sm btn-outline-primary me-2">
+                                      <i className="fas fa-edit"></i>
+                                    </button>
+                                    <button 
+                                      className="btn btn-sm btn-outline-danger"
+                                      onClick={() => handleDeleteDepartment('section', row.sectionCode)}
+                                    >
+                                      <i className="fas fa-trash"></i>
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={user.role === "Administrator" || user.role === "Staff" ? 5 : 4} className="text-center">
+                              No departments found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-    </div>
-    </div>
-    <div className="modal fade" id="addModal" tabIndex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
+      </div>
+
+      {/* Add Department Modals */}
+       <div className="modal fade" id="addModal" tabIndex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
             <div className="modal-dialog modal-lg">
                 <div className="modal-content">
                     <div className="modal-header bg-black text-white">
@@ -127,14 +291,14 @@ const ManageDepartments=()=>
                         <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                {/* Add Department */}
-    {activeComponent === "EducationType" && <EducationType showNotification={showNotification}/>}
+    {activeComponent === "EducationType" && <EducationType showNotification={showNotification} />}
     {activeComponent === "LevelType" && <LevelType showNotification={showNotification}/>}
     {activeComponent === "SectionType" && <SectionType showNotification={showNotification}/>}
               </div>
             </div>
-         </div>        
-   
-        </>
-    );
+         </div>    
+    </>
+  );
 };
+
 export default ManageDepartments;

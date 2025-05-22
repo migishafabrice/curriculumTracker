@@ -1,22 +1,25 @@
 import React, { useState, useEffect, useCallback, useReducer, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import useLoadSchools from './useLoadSchools';
+import Address from './Address';
 import Select from 'react-select';
 import 'react-toastify/dist/ReactToastify.css';
 import ToastMessage from '../ToastMessage';
 import axios from 'axios';
-import Address from './Address';
-import { getCurrentUser } from './AuthUser'; 
-const user=getCurrentUser(); 
-// Define initial form data and reducer outside the component
-const initialFormData = {
+import useLoadSchools from './useLoadSchools';
+import { getCurrentUser } from './AuthUser';
+
+const API_BASE_URL = 'http://localhost:5000';
+const AVATAR_SIZE = '40px';
+
+const initialFormState = {
   firstname: "",
   lastname: "",
   email: "",
   phone: "",
-  school: user?.role==="School" ?user.userid : "",
+  school: "",
   photo: null,
-  role:"",
+  role: "",
   address: {
     province: '',
     district: '',
@@ -36,137 +39,113 @@ const formReducer = (state, action) => {
         address: { ...state.address, [action.field]: action.value } 
       };
     case 'RESET':
-      return initialFormData;
+      return initialFormState;
     default:
       return state;
   }
 };
 
 const ManageTeachers = () => {
-  
-  const [formData, dispatch] = useReducer(formReducer, initialFormData);
+  const user = getCurrentUser();
+  const [formData, dispatch] = useReducer(formReducer, initialFormState);
   const [notification, setNotification] = useState({ message: null, type: null });
   const [teachers, setTeachers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const { schools, notice, loadSchools } = useLoadSchools();
-
+  const { schools } = useLoadSchools();
   const teachersPerPage = 10;
 
   const schoolOptions = useMemo(() => 
-    schools.map((school) => ({
-      value: school.code, 
-      label: school.name, 
+    schools.map(school => ({
+      value: school.code,
+      label: school.name
     }))
   , [schools]);
 
-  // Notification effect with cleanup
-  useEffect(() => {
-    if (notice) {
-      setNotification(notice);
-    }
-  }, [notice]);
-
-  useEffect(() => {
-    if (notification.message) {
-      const timer = setTimeout(() => {
-        setNotification({ message: null, type: null });
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  // Load schools and teachers on mount
-  useEffect(() => {
-    const initializeData = async () => {
-      await loadSchools();
-      await fetchTeachers();
-    };
-    initializeData();
-  }, []);
-
-
-  const fetchTeachers = async () => {
+  const fetchTeachers = useCallback(async () => {
     try {
-      let response;
-      if (user.role === 'School') {
-        response = await axios.get('http://localhost:5000/teacher/allTeachers', {
-          headers: { Authorization: `Bearer ${user.token}` },
-          params: { userid: user.userid }
-        });
-      } else {
-        response = await axios.get('http://localhost:5000/teacher/allTeachers', {
-          headers: { Authorization: `Bearer ${user.token}` }
-        });
-      }
-  
+      setIsLoading(true);
+      const params = user?.role === 'School' ? { userid: user.userid } : {};
+      const response = await axios.get(`${API_BASE_URL}/teacher/allTeachers`, {
+        headers: { Authorization: `Bearer ${user?.token}` },
+        params
+      });
+
       if (response.data.teachers && response.data.type === "success") {
-        setTeachers(Array.isArray(response.data.teachers) ? response.data.teachers : []);
-      } else if (response.data.type === "error") {
-        setNotification({ message: response.data.message, type: "error" });
+        setTeachers(response.data.teachers);
+      } else {
+        setNotification({ message: response.data.message || 'Failed to fetch teachers', type: 'error' });
       }
+      setIsLoading(false);
     } catch (error) {
       setNotification({ 
         message: `Error fetching teachers: ${error.message}`, 
         type: 'error' 
       });
-      setTeachers([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchTeachers();
+  }, []);
 
   const filteredTeachers = useMemo(() => {
-    // Add additional type checking to be safe
     if (!Array.isArray(teachers)) return [];
     
     return teachers.filter(teacher => {
-      // Add null checks for teacher properties
+      const searchLower = searchTerm.toLowerCase();
       const firstname = teacher?.firstname?.toLowerCase() || '';
       const lastname = teacher?.lastname?.toLowerCase() || '';
-      const status = teacher?.status || '';
-      
-      const matchesSearch = firstname.includes(searchTerm.toLowerCase()) || 
-                          lastname.includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
+      const email = teacher?.email?.toLowerCase() || '';
+      const phone = teacher?.telephone?.toLowerCase() || '';
+      const school = schools.find(s => s.code === teacher.school)?.name.toLowerCase() || '';
+      const status = teacher?.active === 1 ? 'active' : 'inactive';
+
+      return (
+        (firstname.includes(searchLower) || lastname.includes(searchLower)) &&
+        (statusFilter === 'all' || status === statusFilter)
+        && (firstname.includes(searchLower) || lastname.includes(searchLower) || email.includes(searchLower) || phone.includes(searchLower)) &&
+        (statusFilter === 'all' || status === statusFilter) &&
+        (school.includes(searchLower) || email.includes(searchLower) || phone.includes(searchLower))
+
+      );
     });
-  }, [teachers, searchTerm, statusFilter]);
+  }, [teachers, searchTerm, statusFilter, schools]);
 
   const paginatedTeachers = useMemo(() => {
     const startIndex = (currentPage - 1) * teachersPerPage;
     return filteredTeachers.slice(startIndex, startIndex + teachersPerPage);
   }, [filteredTeachers, currentPage]);
-  useEffect(() => {
-    setCurrentPage(1); // Reset to the first page when teachers list changes
-  }, [teachers]);
+
   const totalPages = Math.ceil(filteredTeachers.length / teachersPerPage);
 
-  const handleInputChange = (e) => {
+  const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
     dispatch({ type: 'UPDATE_FIELD', field: name, value });
-  };
+  }, []);
 
   const handleAddressChange = useCallback((field, value) => {
     dispatch({ type: 'UPDATE_ADDRESS', field, value });
   }, []);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = useCallback((e) => {
     dispatch({ type: 'UPDATE_FIELD', field: 'photo', value: e.target.files[0] });
-  };
+  }, []);
 
-  const handleSchoolChange = (selectedOption) => {
+  const handleSchoolChange = useCallback((selectedOption) => {
     dispatch({
       type: 'UPDATE_FIELD',
       field: 'school',
       value: selectedOption ? selectedOption.value : ""
     });
-  };
+  }, []);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     if (!formData.firstname || !formData.lastname) {
       setNotification({ message: 'First and last name are required', type: 'error' });
       return false;
@@ -184,35 +163,36 @@ const ManageTeachers = () => {
       return false;
     }
     if (!formData.school) {
-      setNotification({ message: 'School is required ' , type: 'error' });
+      setNotification({ message: 'School is required', type: 'error' });
       return false;
     }
     return true;
-  };
+  }, [formData]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
     
     try {
+      setIsLoading(true);
       const data = new FormData();
-      // Append all form fields
       data.append('firstname', formData.firstname);
       data.append('lastname', formData.lastname);
       data.append('email', formData.email);
       data.append('phone', formData.phone);
       data.append('school', formData.school);
       data.append('role', formData.role);
-      if (formData.photo) {
-        data.append('photo', formData.photo);
-      }
+      if (formData.photo) data.append('photo', formData.photo);
+
       const response = await axios.post(
-        'http://localhost:5000/teacher/addTeacher', 
+        `${API_BASE_URL}/teacher/addTeacher`, 
         data, 
-        { headers: { 'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${user.token}`,
-         
-        } }
+        { 
+          headers: { 
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${user.token}`
+          } 
+        }
       );
 
       if (response.data.type === 'success') {
@@ -223,36 +203,65 @@ const ManageTeachers = () => {
       } else {
         setNotification({ message: response.data.error, type: 'error' });
       }
+      setIsLoading(false);
     } catch (error) {
       setNotification({ 
         message: `Error: ${error.response?.data?.message || error.message}`, 
         type: 'error' 
       });
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [formData, user, validateForm, fetchTeachers]);
 
-  const handleDeleteTeacher = async (teacherId) => {
+  const handleDeleteTeacher = useCallback(async (teacherId) => {
     if (window.confirm('Are you sure you want to delete this teacher?')) {
       try {
+        setIsLoading(true);
         const response = await axios.delete(
-          `http://localhost:5000/teacher/deleteTeacher/${teacherId}`
+          `${API_BASE_URL}/teacher/deleteTeacher/${teacherId}`,
+          { headers: { Authorization: `Bearer ${user.token}` } }
         );
+
         if (response.data.type === 'success') {
           setNotification({ message: response.data.message, type: 'success' });
           await fetchTeachers();
+        } else {
+          setNotification({ message: response.data.error, type: 'error' });
         }
+        setIsLoading(false);
       } catch (error) {
         setNotification({ 
           message: `Error deleting teacher: ${error.message}`, 
           type: 'error' 
         });
+      } finally {
+        setIsLoading(false);
       }
     }
-  };
+  }, [user, fetchTeachers]);
 
-  const handlePageChange = (newPage) => {
+  const handlePageChange = useCallback((newPage) => {
     if (newPage > 0 && newPage <= totalPages) {
       setCurrentPage(newPage);
+    }
+  }, [totalPages]);
+
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const getPageTitle = () => {
+    switch(user.role) {
+      case 'Administrator':
+        return 'Manage Teachers';
+      case 'School':
+        return 'School Teachers';
+      case 'Teacher':
+        return 'Teacher Directory';
+      default:
+        return 'Teachers Management';
     }
   };
 
@@ -262,60 +271,56 @@ const ManageTeachers = () => {
         <ToastMessage 
           message={notification.message} 
           type={notification.type} 
+          onClose={() => setNotification({ message: null, type: null })}
         />
       )}
-      <Sidebar/>
+      
+      <Sidebar />
+      
       <div className="page-content">
         <div id="teachers-page" className="page">
           <div className="page-header">
-            <h1 className="h2">Teachers Management</h1>
-            <div>
-              <button 
-                className="btn btn-primary" 
-                data-bs-toggle="modal" 
-                data-bs-target="#addTeacherModal"
-              >
-                <i className="fas fa-plus"></i> Add New Teacher
-              </button>
-            </div>
+            <h1 className="h2">{getPageTitle()}</h1>
+            <button 
+              className="btn btn-primary"
+              data-bs-toggle="modal" 
+              data-bs-target="#addTeacherModal"
+              disabled={isLoading}
+            >
+              <i className="fas fa-plus me-2"></i> Add New Teacher
+            </button>
           </div>
-                    
+          
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="card-title mb-0">Teachers List</h5>
-            </div>
-            <div className="d-flex justify-content-end align-items-center mt-4 mb-3 pe-3" 
-                 style={{ width: "60%", marginLeft: "auto" }}>
-              {/* Search Input */}
-              <div className="input-group me-2">
-                <span className="input-group-text"><i className="fas fa-search"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  id="teacherSearch" 
-                  placeholder="Search by name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            
-              {/* Filter Dropdown */}
-              <div className="input-group">
-                <span className="input-group-text"><i className="fas fa-filter"></i></span>
-                <select 
-                  className="form-select" 
-                  id="filterStatus"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="on-leave">On Leave</option>
-                </select>
+              <div className="d-flex justify-content-end align-items-center mt-4 mb-3 pe-3" style={{ width: "60%", marginLeft: "auto" }}>
+                <div className="input-group me-2">
+                  <span className="input-group-text"><i className="fas fa-search"></i></span>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <span className="input-group-text"><i className="fas fa-filter"></i></span>
+                  <select 
+                    className="form-select" 
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
               </div>
             </div>
             
-            <div className="card-body">
+            <div className="card-body p-1">
               {isLoading ? (
                 <div className="text-center">
                   <div className="spinner-border text-primary" role="status">
@@ -328,7 +333,6 @@ const ManageTeachers = () => {
                     <table className="table table-hover">
                       <thead>
                         <tr>
-                          
                           <th>Teacher</th>
                           <th>Email</th>
                           <th>Contact</th>
@@ -341,29 +345,34 @@ const ManageTeachers = () => {
                         {paginatedTeachers.length > 0 ? (
                           paginatedTeachers.map((teacher) => (
                             <tr key={teacher._id}>
-                              
                               <td>
                                 <div className="d-flex align-items-center">
                                   {teacher.photo ? (
                                     <img 
-                                    src={`http://localhost:5000${teacher.photo}`} 
-                                    alt="Avatar" 
-                                    className="avatar" 
-                                    style={{ width: '40px', height: '40px', borderRadius: '50%' }}
-                                    onError={(e) => {
-                                      e.target.onerror = null;
-                                      e.target.src = '/assets/img/no-image.png';
-                                    }}
-                                  />
+                                      src={`${API_BASE_URL}${teacher.photo}`} 
+                                      alt="Teacher" 
+                                      className="avatar rounded-circle me-2"
+                                      style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}
+                                      onError={(e) => e.target.src = '/default-avatar.png'}
+                                    />
                                   ) : (
-                                    <div className="avatar-placeholder">
-                                      {teacher.firstname.charAt(0)}{teacher.lastname.charAt(0)}
+                                    <div 
+                                      className="avatar-placeholder rounded-circle me-2 d-flex align-items-center justify-content-center"
+                                      style={{ 
+                                        width: AVATAR_SIZE, 
+                                        height: AVATAR_SIZE,
+                                        backgroundColor: '#f0f0f0',
+                                        color: '#666'
+                                      }}
+                                    >
+                                      {teacher.firstname?.charAt(0)}{teacher.lastname?.charAt(0)}
                                     </div>
                                   )}
-                                  <div className="ms-2">
+                                  <div>
                                     <div className="fw-bold">
                                       {teacher.firstname} {teacher.lastname}
                                     </div>
+                                    <small className="text-muted">{teacher.role}</small>
                                   </div>
                                 </div>
                               </td>
@@ -373,8 +382,8 @@ const ManageTeachers = () => {
                                 {schools.find(s => s.code === teacher.school)?.name || 'N/A'}
                               </td>
                               <td>
-                                <span className={`badge ${teacher.active === 1 ? 'bg-success' : 'bg-warning'} status-badge`}>
-                                  {teacher.active === 1 ? 'Active' : 'Deactivated'}
+                                <span className={`badge ${teacher.active === 1 ? 'bg-success' : 'bg-warning'}`}>
+                                  {teacher.active === 1 ? 'Active' : 'Inactive'}
                                 </span>
                               </td>
                               <td>
@@ -392,14 +401,13 @@ const ManageTeachers = () => {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="7" className="text-center">No teachers found</td>
+                            <td colSpan="6" className="text-center">No teachers found</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
                   
-                  {/* Pagination */}
                   {totalPages > 1 && (
                     <nav>
                       <ul className="pagination justify-content-end">
@@ -441,13 +449,13 @@ const ManageTeachers = () => {
           </div>
         </div>
       </div>
-    
-      {/* Modal to add new teacher */}
-      <div className="modal fade" id="addTeacherModal" tabIndex="-1" aria-labelledby="addTeacherModalLabel" aria-hidden="true">
+
+      {/* Add Teacher Modal */}
+      <div className="modal fade" id="addTeacherModal" tabIndex="-1" aria-hidden="true">
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
             <div className="modal-header bg-black text-white">
-              <h5 className="modal-title" id="addTeacherModalLabel">Add New Teacher</h5>
+              <h5 className="modal-title">Add New Teacher</h5>
               <button 
                 type="button" 
                 className="btn-close btn-close-white" 
@@ -457,19 +465,20 @@ const ManageTeachers = () => {
               ></button>
             </div>
             <div className="modal-body">
-              <form id="teacherForm" onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit}>
                 <div className="row mb-3">
                   <div className="col-md-6">
                     <div className="form-floating mb-3">
-                      <input 
-                        type="text" 
-                        name='firstname' 
-                        value={formData.firstname} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherFirstName" 
+                      <input
+                        type="text"
+                        name="firstname"
+                        value={formData.firstname}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="teacherFirstName"
                         placeholder="First Name"
                         required
+                        disabled={isLoading}
                       />
                       <label htmlFor="teacherFirstName">
                         <i className="fas fa-user me-2"></i>First Name
@@ -478,15 +487,16 @@ const ManageTeachers = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="form-floating mb-3">
-                      <input 
-                        type="text" 
-                        name='lastname' 
-                        value={formData.lastname} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherLastName" 
+                      <input
+                        type="text"
+                        name="lastname"
+                        value={formData.lastname}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="teacherLastName"
                         placeholder="Last Name"
                         required
+                        disabled={isLoading}
                       />
                       <label htmlFor="teacherLastName">
                         <i className="fas fa-user me-2"></i>Last Name
@@ -498,15 +508,16 @@ const ManageTeachers = () => {
                 <div className="row mb-3">
                   <div className="col-md-6">
                     <div className="form-floating mb-3">
-                      <input 
-                        type="email" 
-                        name='email' 
-                        value={formData.email} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherEmail" 
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="teacherEmail"
                         placeholder="Email"
                         required
+                        disabled={isLoading}
                       />
                       <label htmlFor="teacherEmail">
                         <i className="fas fa-envelope me-2"></i>Email
@@ -515,15 +526,16 @@ const ManageTeachers = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="form-floating mb-3">
-                      <input 
-                        type="tel" 
-                        name='phone' 
-                        value={formData.phone} 
-                        onChange={handleInputChange} 
-                        className="form-control" 
-                        id="teacherPhone" 
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="form-control"
+                        id="teacherPhone"
                         placeholder="Phone"
                         required
+                        disabled={isLoading}
                       />
                       <label htmlFor="teacherPhone">
                         <i className="fas fa-phone me-2"></i>Phone
@@ -531,67 +543,93 @@ const ManageTeachers = () => {
                     </div>
                   </div>
                 </div>
-                {user.role!=='School' && <Address
-                  address={formData.address} 
-                  onChange={handleAddressChange} 
-                />}
-                
-                
+
+                {user.role !== 'School' && (
+                  <Address
+                    address={formData.address}
+                    onChange={handleAddressChange}
+                    disabled={isLoading}
+                  />
+                )}
+
                 <div className="row mb-3">
-                <div className="col-md-6">
-                  <label htmlFor="teacherSchool" className="form-label">
-                    <i className="fas fa-school me-2"></i>School
-                  </label>
-                  {user.role!=='School' ? (<Select
-                    id="teacherSchool"
-                    name='school'
-                    classNamePrefix="select"
-                    placeholder="Select School"
-                    isClearable={true} 
-                    isSearchable={true} 
-                    options={schoolOptions} 
-                    value={schoolOptions.find(option => option.value === formData.school) || null}
-                    onChange={handleSchoolChange}
-                    required
-                  />):(<select name='school' className='form-select' value={user.userid} onLoad={handleInputChange}>
-                    <option value={user.userid}>{user.firstname}</option>
-                    </select>) }
+                  <div className="col-md-6">
+                    <label htmlFor="teacherSchool" className="form-label">
+                      <i className="fas fa-school me-2"></i>School
+                    </label>
+                    {user.role !== 'School' ? (
+                      <Select
+                        id="teacherSchool"
+                        classNamePrefix="select"
+                        placeholder="Select School"
+                        options={schoolOptions}
+                        value={schoolOptions.find(option => option.value === formData.school) || null}
+                        onChange={handleSchoolChange}
+                        isDisabled={isLoading}
+                        required
+                      />
+                    ) : (
+                      <select 
+                        name="school" 
+                        className="form-select" 
+                        value={user.userid} 
+                        disabled
+                      >
+                        <option value={user.userid}>{user.firstname}</option>
+                      </select>
+                    )}
+                  </div>
+                  <div className="col-md-6">
+                    <label htmlFor="teacherRole" className="form-label">
+                      <i className="fas fa-user-shield me-2"></i>Role
+                    </label>
+                    <select 
+                      className="form-select"
+                      name="role"
+                      value={formData.role}
+                      onChange={handleInputChange}
+                      disabled={isLoading}
+                      required
+                    >
+                      <option value="">Select Role</option>
+                      <option value="School Manager">School Manager</option>
+                      <option value="Head of Teachers">Head of Teachers</option>
+                      <option value="Teacher">Teacher</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="col-md-6">
-                <label htmlFor="teacherSchool" className="form-label">
-                    <i className="fas fa-user-shield me-2"></i>Role
-                  </label>
-                <select className='form-select' name='role' onChange={handleInputChange} value={formData.role}>
-                  <option value=''>Select Role</option>
-                  <option value='School Manager'>School Manager</option>
-                  <option value='Head of Teachers'>Head of Teachers</option>
-                  <option value='Teacher'>Teacher</option>
-                </select>
-                </div>
-                </div>
+
                 <div className="mb-3">
                   <label htmlFor="teacherPhoto" className="form-label">
                     <i className="fas fa-image me-2"></i>Upload Photo
                   </label>
-                  <input 
-                    className="form-control" 
-                    name='photo' 
-                    onChange={handleFileChange} 
-                    type="file" 
+                  <input
+                    className="form-control"
+                    type="file"
                     id="teacherPhoto"
                     accept="image/*"
+                    onChange={handleFileChange}
+                    disabled={isLoading}
                   />
                 </div>
-                
+
                 <div className="modal-footer">
                   <button 
                     type="button" 
                     className="btn btn-secondary" 
                     data-bs-dismiss="modal"
+                    disabled={isLoading}
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary">
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    ) : null}
                     Save Teacher
                   </button>
                 </div>

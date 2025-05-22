@@ -3,6 +3,7 @@ import axios from 'axios';
 import Select from 'react-select';
 import { fetchEducationTypes, fetchLevelTypes } from './AppFunctions';
 import { getCurrentUser } from './AuthUser';
+import { act } from 'react';
 const user=getCurrentUser();
 const SectionType = ({ showNotification }) => {
     const [formData, setFormData] = useState({
@@ -29,7 +30,8 @@ const SectionType = ({ showNotification }) => {
         } catch (err) {
             showNotification({
                 message: 'Failed to fetch education types',
-                type: 'error'
+                type: 'error',
+                action: false
             });
             console.error("Failed to fetch education types:", err);
         } finally {
@@ -53,7 +55,7 @@ const SectionType = ({ showNotification }) => {
         } catch (err) {
             showNotification({
                 message: 'Failed to fetch level types',
-                type: 'error'
+                type: 'error',act
             });
             console.error("Failed to fetch level types:", err);
         } finally {
@@ -109,7 +111,7 @@ const SectionType = ({ showNotification }) => {
         e.preventDefault();
         
         if (!formData.code || !formData.name || !formData.education_type || !formData.level_type) {
-            showNotification("All fields are required", "error");
+            showNotification("All fields are required", "error", false);
             return;
         }
 
@@ -127,7 +129,7 @@ const SectionType = ({ showNotification }) => {
                 );
 
             if (response.data.type === "success") {
-                showNotification(response.data.message, response.data.type);
+                showNotification(response.data.message, response.data.type, true);
                 resetForm();
                 // Close modal if using Bootstrap
                 document.getElementById('addSectionTypeModal')?.classList.remove('show');
@@ -137,7 +139,7 @@ const SectionType = ({ showNotification }) => {
         } catch (error) {
             showNotification(
                 `An error occurred while saving: ${error.response?.data?.message || error.message}`,
-                "error"
+                "error", false
             );
             console.error("Submission error:", error);
         } finally {

@@ -122,13 +122,14 @@ class_type_code) => {
         console.error("Error fetching course types:", error);
           } 
 }
-export const fetchCurriculumPerTeacher = async (teacher)  => {
+export const fetchCurriculumPerTeacher = async (id,role)  => {
     const user = getCurrentUser();
       try {
        
           const { data } = await axios.post(`http://localhost:5000/curriculum/curriculum-per-teacher`,
             {
-              teacher:teacher
+              id:id,
+              role:role
             },
               { 
                   headers: {
@@ -164,6 +165,72 @@ export const fetchCourseSelected=async (course_code)  => {
             throw new Error(data.message);
         }
         return data.courseSelected;
+        
+    } catch (error) {
+        console.error("Error fetching course types:", error);
+          } 
+}
+export const fetchDepartments = async (userid,userrole) => {
+  const user = getCurrentUser();
+    try {
+        const { data } = await axios.post(
+            "http://localhost:5000/department/departments",
+            { userid: userid,
+              userrole:userrole
+             },  // Send empty string if `school` is falsy
+            { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        if (data.type === "error") {
+            throw new Error(data.message);
+        }
+        const formattedDepartments = data.departments;
+        return formattedDepartments;
+    } catch (error) {
+        console.error("Error fetching departments:", error);
+    } 
+}
+export const fetchCoursesAssigned = async (id,role) => {
+  const user = getCurrentUser();
+    try {
+        const { data } = await axios.post(`http://localhost:5000/curriculum/getCoursesAssigned`,
+          {
+            id:id,
+            role:role
+          },
+            { 
+                headers: {
+                    Authorization: `Bearer ${user.token}`
+                }
+            }
+        );
+        if (data.type === "error") {
+            throw new Error(data.message);
+        }
+        return data.courses;
+        
+    } catch (error) {
+        console.error("Error fetching course types:", error);
+          } 
+}
+export const fetchCurriculaList = async (id,role) => {
+  const user = getCurrentUser();
+    try {
+        const { data } = await axios.post(`http://localhost:5000/curriculum/curricula-list`,
+          {
+            id:id,
+            role:role
+          },
+            { 
+                headers: {
+                    Authorization: `Bearer ${user.token}`
+                }
+            }
+        );
+        if (data.type === "error") {
+            throw new Error(data.message);
+        }
+        
+        return data.curriculaList;
         
     } catch (error) {
         console.error("Error fetching course types:", error);

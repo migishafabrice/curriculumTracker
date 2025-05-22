@@ -4,6 +4,7 @@ const schoolRoute = require('./routes/schoolRoute');
 const teacherRoute=require('./routes/teacherRoute');
 const educationRoute=require('./routes/departmentRoute')
 const curriculumRoute=require('./routes/curriculumRoute');
+const diaryRoute=require('./routes/diaryRoute');
 const authRoute=require('./routes/authRoute');
 const cors = require('cors');
 const path = require('path');
@@ -22,6 +23,7 @@ app.use('/school', schoolRoute);
 app.use('/teacher',teacherRoute);
 app.use('/department',educationRoute);
 app.use('/curriculum',curriculumRoute);
+app.use('/diary',diaryRoute);
 app.use('/auth',authRoute);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/callback', (req, res) => {

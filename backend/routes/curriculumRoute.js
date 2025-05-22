@@ -1,7 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const {addCurriculum,getCurriculumTypes,assignCurriculum,
-    getCurriculumPerTeacher, getCurriculumSelected}=require('../controllers/curriculumController');
+    getCurriculumPerTeachers, getCurriculumSelected, getCurriculaList}=require('../controllers/curriculumController');
 const jwtMiddleware=require('../middleware/jwtMiddleware');
 router.post('/addCurriculum',jwtMiddleware,addCurriculum);
 router.post('/curriculum-types',jwtMiddleware,async (req, res) => {
@@ -32,9 +32,9 @@ router.post('/assignCurriculum',jwtMiddleware,async (req, res) => {
 );
 router.post('/curriculum-per-teacher',jwtMiddleware,async (req, res) => {
     try {
-        const { teacher } = req.body;
+        const { id,role } = req.body;
         
-        const result = await getCurriculumPerTeacher({teacher});
+        const result = await getCurriculumPerTeachers({id,role});
         if (result.type === 'error') {
             return res.json({ message: result.message, type:"error" });
         }
@@ -60,5 +60,33 @@ router.post('/course-selected',jwtMiddleware,async (req, res) => {
     }
 }
 );
+router.post('/getCoursesAssigned',jwtMiddleware,async (req, res) => {
+    try {
+        const { id,role } = req.body;
+        
+        const result = await getCurriculumPerTeachers({id,role});
+        if (result.type === 'error') {
+            return res.json({ message: result.message, type:"error" });
+        }
+        
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+}
+);
+router.post('/curricula-list', async (req, res) => {
+  try {
+    const { id,role } = req.body;
+    const curriculum = await getCurriculaList({ id, role });
+    if (curriculum.type === 'error') {
+      return res.status(400).json(curriculum);
+    }
+    return res.json(curriculum);
+  } catch (error) {
+    console.error('Error fetching curriculum list:', error);
+    return res.status(500).json({ message: 'Server error', type: 'error' });
+  }
+});
 // router.get('/getCurriculum',jwtMiddleware,getCurriculum);
 module.exports=router;

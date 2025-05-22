@@ -38,7 +38,7 @@ const validateUser = async (username, password) => {
           const user = result[0];
           if (query.table === 'staff' && user.role === 'Administrator') {
             return {
-              userid: user.id,
+              userid: user.code,
               email: user.email,
               firstName:'Administrator',
               lastName:'',

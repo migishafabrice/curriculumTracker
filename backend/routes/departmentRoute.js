@@ -9,7 +9,8 @@ const {
     getLevelTypes,
     addSectionType,
     getSectionTypes,
-    getClassTypes,   
+    getClassTypes,  
+    getDepartments, 
 } = require('../controllers/departmentController');
 router.post('/education-type',jwtMiddleware, addEducationType);
 router.post('/education-types', jwtMiddleware, async (req, res) => {
@@ -65,4 +66,16 @@ router.post('/class-types', jwtMiddleware, async(req, res) => {
     }
 }
 );
+router.post('/departments', jwtMiddleware, async (req, res) => {
+    try {
+        const { userid,userrole } = req.body;
+        const result = await getDepartments({ userid,userrole });
+        if (result.type === 'error') {
+            return res.status(400).json({ message: result.message, type:"error" });
+        }
+       return res.json(result);
+    } catch (error) {
+       return res.json({ message: error.message, type:"error" });
+    }
+});
 module.exports = router;

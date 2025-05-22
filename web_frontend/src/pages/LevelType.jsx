@@ -36,7 +36,7 @@ const LevelType = ({ showNotification }) => {
     } catch (err) {
       showNotification({
         message: 'Failed to fetch education types',
-        type: 'error'
+        type: 'error',action:false
       });
       console.error("Failed to fetch education types:", err);
     } finally {
@@ -77,7 +77,7 @@ const LevelType = ({ showNotification }) => {
     e.preventDefault();
     
     if (!formData.name || !formData.code || !formData.education_type || !formData.description) {
-      showNotification("All fields are required", "error");
+      showNotification("All fields are required", "error",false);
       return;
     }
 
@@ -88,7 +88,7 @@ const LevelType = ({ showNotification }) => {
       );
 
       if (response.data.type === "success") {
-        showNotification(response.data.message, response.data.type);
+        showNotification(response.data.message, response.data.type,true);
         resetForm();
         // Close modal if using Bootstrap
         document.getElementById('addLevelModal')?.classList.remove('show');
@@ -98,7 +98,7 @@ const LevelType = ({ showNotification }) => {
     } catch (error) {
       showNotification(
         `An error occurred while saving: ${error.response?.data?.message || error.message}`,
-        "error"
+        "error",false
       );
       console.error("Submission error:", error);
     } finally {

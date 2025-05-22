@@ -23,7 +23,7 @@ const EducationType = ({ showNotification }) => {
         
         // Validate form data
         if (!formData.name || !formData.code || !formData.description) {
-            showNotification("All fields are required", "error");
+            showNotification("All fields are required", "error",false);
             return;
         }
 
@@ -34,7 +34,7 @@ const EducationType = ({ showNotification }) => {
             );
 
             if (response.data.type === "success") {
-                showNotification(response.data.message, response.data.type);
+                showNotification(response.data.message, response.data.type, true);
                 resetForm();
                 // Close modal if using Bootstrap
                 document.getElementById('addEducationModal')?.classList.remove('show');
@@ -44,7 +44,7 @@ const EducationType = ({ showNotification }) => {
         } catch (error) {
             showNotification(
                 `An error occurred while saving: ${error.response?.data?.message || error.message}`,
-                "error"
+                "error",false
             );
             console.error("Submission error:", error);
         } finally {

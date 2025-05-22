@@ -159,8 +159,8 @@ const assignCurriculum = async ({teacherCode,courses,school}) => {
     const teacherCourses = courses
     ? JSON.stringify(courses.map(course => course.code))
     : null;
-  const query = `INSERT INTO courses (teacher_code, curriculum_code, school_code) VALUES (?, ?, ?)`;
-  const [result]= await db.query(query, [teacherCode, teacherCourses, school]);
+  const query = `update teachers set curricula_code=? where code=? and school_code=?)`;
+  const [result]= await db.query(query, [ teacherCourses, teacherCode, school]);
     
     if (result.affectedRows === 0) {
       return ({ message: 'Failed to assign courses', type: 'error' });
@@ -171,35 +171,102 @@ const assignCurriculum = async ({teacherCode,courses,school}) => {
     return ({ message: error.message, type: 'error' });
   }
 };
-const getCurriculumPerTeacher = async ({teacher}) => {
+const getCurriculumPerTeachers = async ({id, role}) => {
   try {
-    if (!teacher) {
-      return { message: 'Teacher code is required', type: 'error' };
+    if (!role || !id) {
+      return { message: 'User id and User role are required', type: 'error' };
     }
-    const query = `SELECT * FROM courses WHERE teacher_code = ?`;
-    const values = [teacher];
-    const [rows] = await db.query(query, values);
+    if (role === 'Teacher') {
+      const query = `
+      SELECT t.*,s.code,s.name as school_name FROM teachers t join schools s on
+      t.school_code=s.code
+      WHERE t.code = ? and t.curricula_code IS NOT NULL
+      `;
+      const values = [id];
+      const [rows] = await db.query(query, values);
 
-    if (rows.length === 0) {
-      return { message: 'You are not assigned any course', type: 'error' };
+      if (rows.length === 0) {
+        return { message: 'You are not assigned any course', type: 'error' };
+      }
+
+      const Codes = JSON.parse(rows[0].curricula_code || '[]');
+      if (Codes.length === 0) {
+        return { message: 'No curricula codes found for the teacher', type: 'error' };
+      }
+
+      const placeholders = Codes.map(() => '?').join(',');
+      const curriculumQuery = `
+      SELECT cu.name, cu.code as course_code,ed.code,ed.name as education_name,
+        cu.class_type_code as class_name,
+        lt.code,lt.name as level_name,
+        st.code,st.name as section_name FROM curricula cu 
+        join education_types ed on cu.education_type_code=ed.code
+        join level_types lt on cu.level_type_code=lt.code
+        join section_types st on cu.section_type_code=st.code
+        WHERE cu.code IN (${placeholders})
+      `;
+      const [curriculumRows] = await db.query(curriculumQuery, Codes);
+
+      const teacherName = rows[0].firstname+" "+rows[0].lastname;
+      const schoolName = rows[0].school_name;
+      const courses = curriculumRows.map(row => ({
+        name: row.name,
+        code: row.course_code,
+        education_name: row.education_name,
+        level_name: row.level_name,
+        section_name: row.section_name,
+        class_name: row.class_name,
+        teacher: teacherName,
+        school: schoolName
+      }));
+      return { courses: courses, type: 'success' };
     }
+    if (role === "School") {
+      const query = `SELECT t.*,s.name as school_name FROM teachers t join schools s on t.school_code=s.code  WHERE t.school_code = ? and t.curricula_code IS NOT NULL`;
+      const values = [id];
+      const [rows] = await db.query(query, values);
 
-    const Codes = JSON.parse(rows[0].curriculum_code || '[]');
-    if (Codes.length === 0) {
-      return { message: 'No curriculum codes found for the teacher', type: 'error' };
+      if (rows.length === 0) {
+        return { message: 'You are not assigned any course', type: 'error' };
+      }
+
+      // For each teacher, get their curricula and name
+      let courses = [];
+      for (const teacher of rows) {
+        const Codes = JSON.parse(teacher.curricula_code || '[]');
+        if (Codes.length === 0) continue;
+
+        const placeholders = Codes.map(() => '?').join(',');
+        const curriculumQuery = `SELECT cu.name, cu.code as course_code,ed.code,ed.name as education_name,
+        cu.class_type_code as class_name,
+        lt.code,lt.name as level_name,
+        st.code,st.name as section_name FROM curricula cu 
+        join education_types ed on cu.education_type_code=ed.code
+        join level_types lt on cu.level_type_code=lt.code
+        join section_types st on cu.section_type_code=st.code
+        WHERE cu.code IN (${placeholders})`;
+        const [curriculumRows] = await db.query(curriculumQuery, Codes);
+
+        curriculumRows.forEach(row => {
+          courses.push({
+            name: row.name,
+            code: row.course_code,
+            school: teacher.school_name,
+            teacher: teacher.firstname+" "+teacher.lastname,
+            education_name: row.education_name, 
+            level_name: row.level_name,
+            section_name: row.section_name,
+            class_name: row.class_name
+          });
+        });
+      }
+       
+      if (courses.length === 0) {
+        return { message: 'No curricula codes found for the teachers', type: 'error' };
+      }
+
+      return { courses: courses, type: 'success' };
     }
-
-    const placeholders = Codes.map(() => '?').join(',');
-    const curriculumQuery = `SELECT name, code FROM curricula WHERE code IN (${placeholders})`;
-    const [curriculumRows] = await db.query(curriculumQuery, Codes);
-
-    const courses = curriculumRows.map(row => ({
-      name: row.name,
-      code: row.code,
-    }));
-
-    return { courses: courses, type: 'success' };
-    
   } catch (error) {
     console.error('Error fetching curriculum types:', error);
     return { message: error.message, type: 'error' };
@@ -234,6 +301,32 @@ const getCurriculumSelected = async ({course}) => {
     return { message: error.message, type: 'error' };
   }
 }
+const getCurriculaList = async ({id,role}) => {
+  try {
+    if(!role || !id) {
+      return { message: 'User id and User role are required', type: 'error' };
+    }
+    if(role === 'Administrator' || role==="Staff") {
+    const query = `SELECT cu.*,cu.code as curriculum_code,et.code,et.name as education_name,
+    lt.code,lt.name as level_name,
+    st.code,st.name as section_name FROM curricula cu
+    join education_types et on cu.education_type_code=et.code
+    join level_types lt on cu.level_type_code=lt.code
+    join section_types st on cu.section_type_code=st.code order by cu.name, et.name, lt.name, st.name`;
+    const [rows] = await db.query(query);
+    
+    if (rows.length === 0) {
+      return { message: 'No Curriculum - Course found', type: 'error' };
+    }
+    
+    return { curriculaList: rows, type: 'success' };
+  }
+  } catch (error) {
+    console.error('Error fetching curriculum types:', error);
+    return { message: error.message, type: 'error' };
+  }
+}
 module.exports = { 
-  addCurriculum , getCurriculumTypes,assignCurriculum,getCurriculumPerTeacher, getCurriculumSelected
+  addCurriculum , getCurriculumTypes,assignCurriculum,getCurriculumPerTeachers, getCurriculumSelected,
+  getCurriculaList
 };

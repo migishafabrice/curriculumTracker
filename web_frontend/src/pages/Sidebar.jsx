@@ -22,7 +22,7 @@ const Sidebar = () => {
                 <div className="d-flex flex-column justify-content-between px-3 pt-3 text-white min-vh-100">
                     <div>
                         <Link to="/" className="d-flex align-items-center pb-2 mb-md-0 me-md-auto text-white text-decoration-none">
-                            <span className="fs-5 d-none d-sm-inline">EduManage</span>
+                            <span className="fs-10 d-none d-sm-inline">EduTech Tool</span>
                         </Link>
 
                         <ul className="nav nav-pills flex-column mb-2">
@@ -33,7 +33,7 @@ const Sidebar = () => {
                                     icon: "fa-school",
                                     text: "Schools"
                                   },
-                            (user?.role === "Administrator" || user?.role === "Staff") &&  
+                              
                             { to: "/Departments", icon: "fa-chalkboard-teacher", text: "Departments" },
                             (user?.role === "Administrator" || user?.role === "Staff" || user?.role === "School") &&   
                             { to: "/Teachers", icon: "fa-users", text: "Teachers" },
